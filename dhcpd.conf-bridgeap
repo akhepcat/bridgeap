@@ -14,6 +14,6 @@ subnet 100.64.43.0 netmask 255.255.255.0 {
 }
 
 host localgw {
-	hardware ethernet c8:d3:a3:ab:b9:37;
+	hardware ethernet 0d:ed:be:ef:ca:fe;
 	fixed-address 100.64.43.1;
 }
