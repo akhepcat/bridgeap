@@ -1,6 +1,6 @@
 #/bin/sh
 PROG="${0##*/}"
-PDIR="${0}"
+PDIR=$( cd $( dirname "${BASH_SOURCE[0]}" ) && pwd )
 DO_RETURN=${SHLVL}
 
 do_exit()
@@ -25,12 +25,16 @@ unmanage_interface() {
         UNMANAGED=$(fgrep unmanaged-devices /etc/NetworkManager/NetworkManager.conf)
 	KEYFILE=$(fgrep "[keyfile]" /etc/NetworkManager/NetworkManager.conf)
 
-	if [ -z "${KEYFILE}" ]
+	if [ -z "${KEYFILE}" ] 
 	then
 		echo "[keyfile]" >> /etc/NetworkManager/NetworkManager.conf
 		echo "unmanaged-devices=mac:${MAC}" >> /etc/NetworkManager/NetworkManager.conf
-	else
+
+	elif [ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]
+	then
                 sed -i "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
+	else
+		return
 	fi
 
 	service network-manager restart
@@ -43,8 +47,11 @@ dhcpd_reconf() {
 		sed -i "s/range.*/range ${BRIDGEAP_NET%0}5 ${BRIDGEAP_NET%0}250;/" ${BRIDGEAP_DHCP}
 		sed -i "s/\(broadcast-address\).*/\1 ${BRIDGEAP_NET%0}255;/" ${BRIDGEAP_DHCP}
 		sed -i "s/routers.*/routers ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
+		sed -i "s/\(fixed-address\).*/\1 ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
 	fi
 	test -n "${DNS_IPS}" && sed -i "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
+	test -n "${MAC}" && sed -i "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
+
 }
 
 #############################
