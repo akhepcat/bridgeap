@@ -1,0 +1,153 @@
+#/bin/sh
+PROG="${0##*/}"
+PDIR="${0}"   
+DO_RETURN=${SHLVL}
+
+do_exit()
+{
+        STATUS=${1:-0}
+        REASON=${2}
+
+        if [ -n "${REASON}" ]
+        then
+                echo "${REASON}"
+        fi
+
+        if [ ${DO_RETURN} -eq 1 ];
+        then
+                return $STATUS
+        else
+                exit $STATUS
+        fi
+}
+
+unmanage_interface() {
+        UNMANAGED=$(fgrep unmanaged-devices /etc/NetworkManager/NetworkManager.conf)
+	KEYFILE=$(fgrep "[keyfile]" /etc/NetworkManager/NetworkManager.conf)
+
+	if [ -z "${KEYFILE}" ]
+	then
+		echo "[keyfile]" >> /etc/NetworkManager/NetworkManager.conf
+		echo "unmanaged-devices=mac:${MAC}" >> /etc/NetworkManager/NetworkManager.conf
+	else
+                sed -i "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
+	fi
+
+	service network-manager restart
+}
+
+#############################
+
+start() {
+	if [ "${INSIDE}" = "${OUTSIDE}" ]
+	then
+                echo "Conflicting interface configuration"
+                do_exit 1
+        fi
+
+        dhcpd_reconf
+
+        if [ -n "${WIFI}" -a -z "$( pgrep -f ${BRIDGEAP_CONF##*/} )" ]
+        then
+                unmanage_interface
+                hostapd_reconf
+ 
+                # update the config for the 'current' wifi interface
+                sed -i "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
+                iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
+                hostapd -B ${BRIDGEAP_CONF} || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
+        fi
+
+        ip -4 addr add dev ${INSIDE} ${BRIDGEAP_GW}
+        ip link set dev ${INSIDE} up
+
+        if [ ! -r ${BRIDGEAP_LEASES} ]
+        then
+                touch ${BRIDGEAP_LEASES}
+        fi
+
+        if [ -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" ]
+        then
+                dhcpd  -4 -user ${DHCP_USER} -group ${DHCP_GROUP} -cf ${BRIDGEAP_DHCP} -lf ${BRIDGEAP_LEASES} -pf ${BRIDGEAP_DHCP_PIDF} ${
+        fi
+
+
+	iptables -A FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
+	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+	iptables -t nat -A POSTROUTING -s ${BRIDGEAP_NET}/24 -o ${OUTSIDE} -j MASQUERADE
+
+	echo 1 >/proc/sys/net/ipv4/conf/all/forwarding
+}
+
+stop() {
+	echo 0 >/proc/sys/net/ipv4/conf/all/forwarding
+
+        iptables -D FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
+        iptables -D FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+        iptables -t nat -D POSTROUTING -s ${BRIDGEAP_NET}/24 -o ${OUTSIDE} -j MASQUERADE
+
+	PID=$( pgrep -f ${BRIDGEAP_CONF##*/} )
+	if [ -n "${PID}" ]
+	then
+		kill -9 ${PID}
+	fi
+
+	PID=$( pgrep -f "dhcpd.*${INSIDE}" )
+	if [ -n "${PID}" ]
+	then
+		kill -9 ${PID}
+	fi
+
+	test -n "${WIFI}" && iwconfig ${WIFI} mode Managed
+	ifconfig ${INSIDE} 0.0.0.0 down
+}
+
+
+################################
+
+if [ -r "${PDIR}/bridgeap.conf" ]
+then
+        . ${PDIR}/bridgeap.conf   
+else
+        do_exit 1 "You must create a bridgeap.conf file in ${PDIR}"
+fi
+
+BRIDGEAP_GW="${BRIDGEAP_NET%0}1"                                      
+
+ROUTE=$(ip -4 route show default scope global)
+DEFROUTE=${ROUTE##*dev }
+OUTSIDE=${DEFROUTE%% *}
+
+# automagically decide if we're wifi->wifi, wifi->eth, or eth->wifi, as much as possible
+ETH="$(ip link show | grep -v "NO.CARRIER" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | head -1 | awk '{print $1}' | grep -v ${OUTSIDE})"
+WIFI=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
+
+if [ -z "${WIFI}" -a -z "${ETH}" ]
+then
+        do_exit 1 "no internal interface available, aborting"
+
+elif [ -n "${WIFI}" -a -n "${ETH}" ]
+then
+        do_exit 1 "both wifi and eth are available, can't auto-decide. aborting"
+else
+        INSIDE="${WIFI}${ETH}"
+
+fi
+
+MAC="$(ip link show ${INSIDE} | grep ether | awk '{print $2}')"
+
+case $1 in
+        start) start
+                ;;
+        stop) stop
+                ;;
+        restart|reload) stop; sleep 2; start
+                ;;
+        *) 
+echo "usage: ${PROG} [start|stop|restart|reload" ;
+echo -e "\t\t bridges outside (${OUTSIDE}) to inside (${INSIDE})";
+                ;;
+esac
+
+do_exit    
+
