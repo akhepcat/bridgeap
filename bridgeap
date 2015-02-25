@@ -9,17 +9,15 @@ done
 PDIR="$( cd -P "$( dirname "$SOURCE" )" && pwd -P )"
 
 DO_RETURN=${SHLVL}
-SED_OPTS="--follow-symlinks -i"
+
+SED="sed --follow-symlinks -i"
 
 do_exit()
 {
         STATUS=${1:-0}
         REASON=${2}
 
-        if [ -n "${REASON}" ]
-        then
-                echo "${REASON}"
-        fi
+        [[ -n "${REASON}" ]] && echo "${REASON}"
 
         if [ ${DO_RETURN} -eq 1 ];
         then
@@ -40,7 +38,7 @@ unmanage_interface() {
 
 	elif [ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]
 	then
-                sed ${SED_OPTS} "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
+                ${SED} "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
 	else
 		return
 	fi
@@ -51,21 +49,21 @@ unmanage_interface() {
 dhcpd_reconf() {
 	if [ -n "${BRIDGEAP_NET}" ]
 	then
-		sed ${SED_OPTS} "s/^subnet.*netmask.*/subnet ${BRIDGEAP_NET} netmask 255.255.255.0 {/" ${BRIDGEAP_DHCP}
-		sed ${SED_OPTS} "s/range.*/range ${BRIDGEAP_NET%0}5 ${BRIDGEAP_NET%0}250;/" ${BRIDGEAP_DHCP}
-		sed ${SED_OPTS} "s/\(broadcast-address\).*/\1 ${BRIDGEAP_NET%0}255;/" ${BRIDGEAP_DHCP}
-		sed ${SED_OPTS} "s/routers.*/routers ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
-		sed ${SED_OPTS} "s/\(fixed-address\).*/\1 ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
+		${SED} "s/^subnet.*netmask.*/subnet ${BRIDGEAP_NET} netmask 255.255.255.0 {/" ${BRIDGEAP_DHCP}
+		${SED} "s/range.*/range ${BRIDGEAP_NET%0}5 ${BRIDGEAP_NET%0}250;/" ${BRIDGEAP_DHCP}
+		${SED} "s/\(broadcast-address\).*/\1 ${BRIDGEAP_NET%0}255;/" ${BRIDGEAP_DHCP}
+		${SED} "s/routers.*/routers ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
+		${SED} "s/\(fixed-address\).*/\1 ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
 	fi
-	test -n "${DNS_IPS}" && sed ${SED_OPTS} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
-	test -n "${MAC}" && sed ${SED_OPTS} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
+	[[ -n "${DNS_IPS}" ]] && ${SED} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
+	[[ -n "${MAC}" ]] && ${SED} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
 
 }
 
 hostapd_reconf() {
-	test -n "${WPA_CHANNEL}" && sed ${SED_OPTS} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
-	test -n "${WPA_PASS}" && sed ${SED_OPTS} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
-	test -n "${SSID}" && sed ${SED_OPTS} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
+	[[ -n "${WPA_CHANNEL}" ]] && ${SED} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
+	[[ -n "${WPA_PASS}" ]] && ${SED} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
+	[[ -n "${SSID}" ]] && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
 }
 
 #############################
@@ -85,7 +83,7 @@ start() {
                 hostapd_reconf
 
                 # update the config for the 'current' wifi interface
-                sed ${SED_OPTS} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
+                ${SED} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
                 iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
                 hostapd -B ${BRIDGEAP_CONF} || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
         fi
@@ -98,12 +96,12 @@ start() {
                 touch ${BRIDGEAP_LEASES}
         fi
 
-        test -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" &&  /usr/sbin/dhcpd  \
+        [[ -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" ]] &&  /usr/sbin/dhcpd  \
 			-4 -user ${DHCP_USER} -group ${DHCP_GROUP} \
 			-cf ${BRIDGEAP_DHCP} -lf ${BRIDGEAP_LEASES} \
 			-pf ${BRIDGEAP_DHCP_PIDF} ${INSIDE}
 
-	test $? -eq 0 || do_exit 1 "dhcp server failed to start"
+	[[ $? -eq 0 ]] || do_exit 1 "dhcp server failed to start"
 
 	iptables -A FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
 	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
@@ -131,7 +129,7 @@ stop() {
 		kill -9 ${PID}
 	fi
 
-	test -n "${WIFI}" && iwconfig ${WIFI} mode Managed
+	[[ -n "${WIFI}" ]] && iwconfig ${WIFI} mode Managed
 	ifconfig ${INSIDE} 0.0.0.0 down
 }
 
@@ -147,25 +145,34 @@ fi
 
 BRIDGEAP_GW="${BRIDGEAP_NET%0}1"
 
-ROUTE=$(ip -4 route show default scope global)
+ROUTE="$(ip -4 route show default scope global | grep -v "dev[[:space:]]*br" )" # ignore bridges
 DEFROUTE=${ROUTE##*dev }
 OUTSIDE=${DEFROUTE%% *}
 
-# automagically decide if we're wifi->wifi, wifi->eth, or eth->wifi, as much as possible
-ETH="$(ip link show | grep -v "NO.CARRIER" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | head -1 | awk '{print $1}' | grep -v ${OUTSIDE})"
+[[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
+
+# First look for any WiFi interfaces...
 WIFI=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
+
+# automagically decide if we're wifi->wifi, wifi->eth, or eth->wifi, as much as possible, ignoring bridges
+ETH="$(ip link show | grep -vE "NO.CARRIER|master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
 
 if [ -z "${WIFI}" -a -z "${ETH}" ]
 then
-        do_exit 1 "no internal interface available, aborting"
-
-elif [ -n "${WIFI}" -a -n "${ETH}" ]
-then
-        do_exit 1 "both wifi and eth are available, can't auto-decide. aborting"
-else
-        INSIDE="${WIFI}${ETH}"
-
+	do_exit 1 "no internal interface available, aborting"
 fi
+
+NUM_ETHS="${ETH//[^\ ]} "
+NUM_ETHS=${#NUM_ETHS}
+ROUTED_IFS="$(ip route show scope link | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
+
+if [ -n "${WIFI}" -a -n "${ETH}" ]
+then
+	do_exit 1 "both wifi and eth are available, can't auto-decide. aborting"
+fi
+
+
+INSIDE="${WIFI}${ETH}"
 
 MAC="$(ip link show ${INSIDE} | grep ether | awk '{print $2}')"
 
