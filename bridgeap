@@ -2,6 +2,7 @@
 PROG="${0##*/}"
 PDIR=$( cd $( dirname "${BASH_SOURCE[0]}" ) && pwd )
 DO_RETURN=${SHLVL}
+SED_OPTS="--follow-symlinks -i"
 
 do_exit()
 {
@@ -32,7 +33,7 @@ unmanage_interface() {
 
 	elif [ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]
 	then
-                sed -i "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
+                sed ${SED_OPTS} "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
 	else
 		return
 	fi
@@ -43,21 +44,21 @@ unmanage_interface() {
 dhcpd_reconf() {
 	if [ -n "${BRIDGEAP_NET}" ]
 	then
-		sed -i "s/^subnet.*netmask.*/subnet ${BRIDGEAP_NET} netmask 255.255.255.0 {/" ${BRIDGEAP_DHCP}
-		sed -i "s/range.*/range ${BRIDGEAP_NET%0}5 ${BRIDGEAP_NET%0}250;/" ${BRIDGEAP_DHCP}
-		sed -i "s/\(broadcast-address\).*/\1 ${BRIDGEAP_NET%0}255;/" ${BRIDGEAP_DHCP}
-		sed -i "s/routers.*/routers ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
-		sed -i "s/\(fixed-address\).*/\1 ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
+		sed ${SED_OPTS} "s/^subnet.*netmask.*/subnet ${BRIDGEAP_NET} netmask 255.255.255.0 {/" ${BRIDGEAP_DHCP}
+		sed ${SED_OPTS} "s/range.*/range ${BRIDGEAP_NET%0}5 ${BRIDGEAP_NET%0}250;/" ${BRIDGEAP_DHCP}
+		sed ${SED_OPTS} "s/\(broadcast-address\).*/\1 ${BRIDGEAP_NET%0}255;/" ${BRIDGEAP_DHCP}
+		sed ${SED_OPTS} "s/routers.*/routers ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
+		sed ${SED_OPTS} "s/\(fixed-address\).*/\1 ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
 	fi
-	test -n "${DNS_IPS}" && sed -i "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
-	test -n "${MAC}" && sed -i "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
+	test -n "${DNS_IPS}" && sed ${SED_OPTS} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
+	test -n "${MAC}" && sed ${SED_OPTS} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
 
 }
 
 hostapd_reconf() {
-	test -n "${WPA_CHANNEL}" && sed -i "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
-	test -n "${WPA_PASS}" && sed -i "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
-	test -n "${SSID}" && sed -i "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
+	test -n "${WPA_CHANNEL}" && sed ${SED_OPTS} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
+	test -n "${WPA_PASS}" && sed ${SED_OPTS} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
+	test -n "${SSID}" && sed ${SED_OPTS} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
 }
 
 #############################
@@ -77,7 +78,7 @@ start() {
                 hostapd_reconf
 
                 # update the config for the 'current' wifi interface
-                sed -i "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
+                sed ${SED_OPTS} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
                 iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
                 hostapd -B ${BRIDGEAP_CONF} || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
         fi
