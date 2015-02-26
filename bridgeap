@@ -99,12 +99,14 @@ start() {
 
                 # update the config for the 'current' wifi interface
                 ${SED} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
+		ifconfig ${WIFI} up
                 iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
                 hostapd -B ${BRIDGEAP_CONF} || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
+	else
+	        ip link set dev ${INSIDE} up
         fi
 
-        ip -4 addr add dev ${INSIDE} ${BRIDGEAP_GW}
-        ip link set dev ${INSIDE} up
+        ip -4 addr add dev ${INSIDE} ${BRIDGEAP_NET%0}1/24 broadcast ${BRIDGEAP_NET%0}255
 
         if [ ! -r ${BRIDGEAP_LEASES} ]
         then
@@ -157,8 +159,6 @@ then
 else
         do_exit 1 "You must create a bridgeap.conf file in ${PDIR}"
 fi
-
-BRIDGEAP_GW="${BRIDGEAP_NET%0}1"
 
 ROUTE="$(ip -4 route show default scope global | grep -v "dev[[:space:]]*br" )" # ignore bridges
 DEFROUTE=${ROUTE##*dev }
