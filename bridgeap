@@ -153,12 +153,21 @@ stop() {
 
 ################################
 
-if [ -r "${PDIR}/bridgeap.conf" ]
+if [ -r "/etc/bridgeap/bridgeap.conf" ]
+then
+        . /etc/bridgeap/bridgeap.conf
+
+elif [ -r "/etc/bridgeap.conf" ]
+then
+        . /etc/bridgeap.conf
+
+elif [ -r "${PDIR}/bridgeap.conf" ]
 then
         . ${PDIR}/bridgeap.conf
 else
-        do_exit 1 "You must create a bridgeap.conf file in ${PDIR}"
+        do_exit 1 "You must create a bridgeap.conf file in ${PDIR}, /etc/, or /etc/bridgeap/"
 fi
+
 
 ROUTE="$(ip -4 route show default scope global | grep -v "dev[[:space:]]*br" )" # ignore bridges
 DEFROUTE=${ROUTE##*dev }
