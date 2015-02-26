@@ -113,8 +113,18 @@ start() {
                 touch ${BRIDGEAP_LEASES}
         fi
 
+	DHCP_VER=$(/usr/sbin/dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
+
+	test -z "${DHCP_VER}" && do_exit 1 "Failed to locate dhcpd"
+
+	if [ ${DHCP_VER} -gt 422 ]
+	then
+		DUSER="-user ${DHCP_USER}"
+		DGROUP="-group ${DHCP_GROUP}"
+	fi
+
         test -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" &&  /usr/sbin/dhcpd  \
-			-4 -user ${DHCP_USER} -group ${DHCP_GROUP} \
+			-4 ${DUSER} ${DGROUP} \
 			-cf ${BRIDGEAP_DHCP} -lf ${BRIDGEAP_LEASES} \
 			-pf ${BRIDGEAP_DHCP_PIDF} ${INSIDE}
 
