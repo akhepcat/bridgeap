@@ -1,15 +1,21 @@
 #/bin/sh
 PROG="${0##*/}"
+
+## this code snippet is taken from Dan Dascalescu's response on
+## http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
 SOURCE="${BASH_SOURCE[0]}"
-while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
-  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
-  SOURCE="$(readlink "$SOURCE")"
-  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+while [ -h "$SOURCE" ]
+do
+	# resolve $SOURCE until the file is no longer a symlink
+	DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+	SOURCE="$(readlink "$SOURCE")"
+	# if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
+	[[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 PDIR="$( cd -P "$( dirname "$SOURCE" )" && pwd -P )"
+## end
 
 DO_RETURN=${SHLVL}
-
 SED="sed --follow-symlinks -i"
 
 do_exit()
@@ -17,7 +23,10 @@ do_exit()
         STATUS=${1:-0}
         REASON=${2}
 
-        [[ -n "${REASON}" ]] && echo "${REASON}"
+        if [ -n "${REASON}" ]
+        then
+                echo "${REASON}"
+        fi
 
         if [ ${DO_RETURN} -eq 1 ];
         then
@@ -28,22 +37,28 @@ do_exit()
 }
 
 unmanage_interface() {
-        UNMANAGED=$(fgrep unmanaged-devices /etc/NetworkManager/NetworkManager.conf)
-	KEYFILE=$(fgrep "[keyfile]" /etc/NetworkManager/NetworkManager.conf)
 
-	if [ -z "${KEYFILE}" ] 
+	if [ -s /etc/NetworkManager/NetworkManager.conf ]
 	then
-		echo "[keyfile]" >> /etc/NetworkManager/NetworkManager.conf
-		echo "unmanaged-devices=mac:${MAC}" >> /etc/NetworkManager/NetworkManager.conf
+	        UNMANAGED=$(fgrep unmanaged-devices /etc/NetworkManager/NetworkManager.conf)
+		KEYFILE=$(fgrep "[keyfile]" /etc/NetworkManager/NetworkManager.conf)
 
-	elif [ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]
-	then
-                ${SED} "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
-	else
-		return
+		if [ -z "${KEYFILE}" ] 
+		then
+			echo "[keyfile]" >> /etc/NetworkManager/NetworkManager.conf
+			echo "unmanaged-devices=mac:${MAC}" >> /etc/NetworkManager/NetworkManager.conf
+
+		elif [ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]
+		then
+	                ${SED} "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
+		else
+			return
+		fi
+
+		# if we've touched anything, we need to restart NetworkManager
+		service network-manager restart
+	# ELSE NOOP
 	fi
-
-	service network-manager restart
 }
 
 dhcpd_reconf() {
@@ -55,15 +70,15 @@ dhcpd_reconf() {
 		${SED} "s/routers.*/routers ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
 		${SED} "s/\(fixed-address\).*/\1 ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
 	fi
-	[[ -n "${DNS_IPS}" ]] && ${SED} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
-	[[ -n "${MAC}" ]] && ${SED} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
+	test -n "${DNS_IPS}" && ${SED} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
+	test -n "${MAC}" && ${SED} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
 
 }
 
 hostapd_reconf() {
-	[[ -n "${WPA_CHANNEL}" ]] && ${SED} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
-	[[ -n "${WPA_PASS}" ]] && ${SED} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
-	[[ -n "${SSID}" ]] && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
+	test -n "${WPA_CHANNEL}" && ${SED} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
+	test -n "${WPA_PASS}" && ${SED} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
+	test -n "${SSID}" && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
 }
 
 #############################
@@ -96,12 +111,12 @@ start() {
                 touch ${BRIDGEAP_LEASES}
         fi
 
-        [[ -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" ]] &&  /usr/sbin/dhcpd  \
+        test -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" &&  /usr/sbin/dhcpd  \
 			-4 -user ${DHCP_USER} -group ${DHCP_GROUP} \
 			-cf ${BRIDGEAP_DHCP} -lf ${BRIDGEAP_LEASES} \
 			-pf ${BRIDGEAP_DHCP_PIDF} ${INSIDE}
 
-	[[ $? -eq 0 ]] || do_exit 1 "dhcp server failed to start"
+	test $? -eq 0 || do_exit 1 "dhcp server failed to start"
 
 	iptables -A FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
 	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
@@ -129,7 +144,7 @@ stop() {
 		kill -9 ${PID}
 	fi
 
-	[[ -n "${WIFI}" ]] && iwconfig ${WIFI} mode Managed
+	test -n "${WIFI}" && iwconfig ${WIFI} mode Managed
 	ifconfig ${INSIDE} 0.0.0.0 down
 }
 
@@ -155,7 +170,8 @@ OUTSIDE=${DEFROUTE%% *}
 WIFI=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
 
 # automagically decide if we're wifi->wifi, wifi->eth, or eth->wifi, as much as possible, ignoring bridges
-ETH="$(ip link show | grep -vE "NO.CARRIER|master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
+[[ 1 -eq $AVOID_DOWN ]] && AVOID_DOWN="NO.CARRIER|"
+ETH="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
 
 if [ -z "${WIFI}" -a -z "${ETH}" ]
 then
