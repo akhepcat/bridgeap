@@ -100,7 +100,10 @@ start() {
                 # update the config for the 'current' wifi interface
                 ${SED} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
 		ifconfig ${WIFI} up
-                iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
+                if [ ${IGNORE_MODE:-0} -eq 0 ]
+		then
+			iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
+		fi
                 test -x /usr/sbin/hostapd && /usr/sbin/hostapd -B ${BRIDGEAP_CONF} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
 	else
 	        ip link set dev ${INSIDE} up
@@ -156,7 +159,10 @@ stop() {
 		kill -9 ${PID}
 	fi
 
-	test -n "${WIFI}" && iwconfig ${WIFI} mode Managed
+	if [ ${IGNORE_MODE:-0} -eq 0 ]
+	then
+		test -n "${WIFI}" && iwconfig ${WIFI} mode Managed
+	fi
 	ifconfig ${INSIDE} 0.0.0.0 down
 }
 
