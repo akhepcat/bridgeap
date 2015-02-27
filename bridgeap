@@ -101,7 +101,7 @@ start() {
                 ${SED} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
 		ifconfig ${WIFI} up
                 iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
-                hostapd -B ${BRIDGEAP_CONF} || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
+                test -x /usr/sbin/hostapd && /usr/sbin/hostapd -B ${BRIDGEAP_CONF} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
 	else
 	        ip link set dev ${INSIDE} up
         fi
@@ -113,7 +113,7 @@ start() {
                 touch ${BRIDGEAP_LEASES}
         fi
 
-	DHCP_VER=$(/usr/sbin/dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
+	DHCP_VER=$( test -x /usr/sbin/dhcpd && /usr/sbin/dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
 
 	test -z "${DHCP_VER}" && do_exit 1 "Failed to locate dhcpd"
 
