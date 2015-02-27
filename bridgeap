@@ -192,28 +192,41 @@ OUTSIDE=${DEFROUTE%% *}
 [[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
 
 # First look for any WiFi interfaces...
-WIFI=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
+WIFIS=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
+
+[[ 1 -eq ${AVOID_DOWN:-0} ]] && AVOID_DOWN="NO.CARRIER|"
+ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
+
 
 # automagically decide if we're wifi->wifi, wifi->eth, or eth->wifi, as much as possible, ignoring bridges
-[[ 1 -eq $AVOID_DOWN ]] && AVOID_DOWN="NO.CARRIER|"
-ETH="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
+ROUTED_IFS="$(ip route show scope link | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
 
-if [ -z "${WIFI}" -a -z "${ETH}" ]
+for RIF in ${ROUTED_IFS}
+do
+	# remove any interfaces that match an active routing interface
+	WIFIS="${WIFIS//$RIF}"
+	ETHS="${ETHS//$RIF}"
+done
+NUM_WIFIS=( ${WIFIS} )
+NUM_WIFIS=${#NUM_WIFIS[@]}
+NUM_ETHS=( ${ETHS} )
+NUM_ETHS=${#NUM_ETHS[@]}
+
+if [ ${NUM_WIFIS} -eq 0 -a ${NUM_ETHS} -eq 0 ]
 then
 	do_exit 1 "no internal interface available, aborting"
 fi
 
-NUM_ETHS="${ETH//[^\ ]} "
-NUM_ETHS=${#NUM_ETHS}
-ROUTED_IFS="$(ip route show scope link | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
-
-if [ -n "${WIFI}" -a -n "${ETH}" ]
+if [ ${NUM_WIFIS} -gt 0 -a ${NUM_ETHS} -gt 0 ]
 then
 	do_exit 1 "both wifi and eth are available, can't auto-decide. aborting"
 fi
 
+[[ ${NUM_WIFIS} -gt 1 ]] && do_exit 1 "Too many available WIFI interfaces for automagic determination"
+[[ ${NUM_ETHS} -gt 1 ]] && do_exit 1 "Too many available ETH interfaces for automagic determination"
 
-INSIDE="${WIFI}${ETH}"
+WIFI=${WIFIS}
+INSIDE="${WIFI}${ETHS}"
 
 MAC="$(ip link show ${INSIDE} | grep ether | awk '{print $2}')"
 
