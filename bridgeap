@@ -1,5 +1,6 @@
 #/bin/sh
 PROG="${0##*/}"
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 
 ## this code snippet is taken from Dan Dascalescu's response on
 ## http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
@@ -18,6 +19,8 @@ PDIR="$( cd -P "$( dirname "$SOURCE" )" && pwd -P )"
 DO_RETURN=${SHLVL}
 SED="sed --follow-symlinks -i"
 
+#############################
+
 do_exit()
 {
         STATUS=${1:-0}
@@ -26,6 +29,16 @@ do_exit()
         [[ -n "${REASON}" ]] && echo "${REASON}"
 
         [[ ${DO_RETURN} -eq 1 ]] && return $STATUS || exit $STATUS
+}
+
+precheck() {
+
+	[[ -z "$(which ip)" ]] && do_exit 1 "iproute2 not installed"
+	[[ -z "$(which dhcpd)" ]] && do_exit 1 "dhcp server not installed"
+	[[ -z "$(which hostapd)" ]] && do_exit 1 "hostapd not installed"
+	[[ -z "$(which ifconfig)" ]] && do_exit 1 "net-tools not installed"
+	[[ -z "$(which iwconfig)" ]] && do_exit 1 "wireless-tools not installed"
+	[[ -z "$(which iptables)" ]] && do_exit 1 "iptables not installed"
 }
 
 unmanage_interface() {
@@ -73,7 +86,6 @@ hostapd_reconf() {
 	[[ -n "${SSID}" ]] && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
 }
 
-#############################
 
 start() {
 	[[ "${INSIDE}" = "${OUTSIDE}" ]] && do_exit 1 "Conflicting interface configuration"
@@ -92,7 +104,7 @@ start() {
 		then
 			iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
 		fi
-                [[ -x /usr/sbin/hostapd ]] && /usr/sbin/hostapd -B ${BRIDGEAP_CONF} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
+                hostapd -B ${BRIDGEAP_CONF} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
 	else
 	        ip link set dev ${INSIDE} up
         fi
@@ -101,9 +113,9 @@ start() {
 
         [[ -r ${BRIDGEAP_LEASES} ]] || touch ${BRIDGEAP_LEASES}
 
-	DHCP_VER=$( test -x /usr/sbin/dhcpd && /usr/sbin/dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
+	DHCP_VER=$( dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
 
-	[[ -z "${DHCP_VER}" ]] && do_exit 1 "Failed to locate dhcpd"
+	[[ -z "${DHCP_VER}" ]] && do_exit 1 "can't determine dhcpd version"
 
 	if [[ ${DHCP_VER} -gt 422 ]]
 	then
@@ -112,7 +124,7 @@ start() {
 	fi
 
         [[ -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" ]] &&  \
-		/usr/sbin/dhcpd  \
+		dhcpd  \
 			-4 ${DUSER} ${DGROUP} \
 			-cf ${BRIDGEAP_DHCP} -lf ${BRIDGEAP_LEASES} \
 			-pf ${BRIDGEAP_DHCP_PIDF} ${INSIDE}
@@ -153,6 +165,9 @@ check_outside() {
 }
 
 ################################
+
+# Make sure we have all the required packages installed
+precheck
 
 if [[ -r "/etc/bridgeap/bridgeap.conf" ]]
 then
