@@ -4,7 +4,7 @@ PROG="${0##*/}"
 ## this code snippet is taken from Dan Dascalescu's response on
 ## http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
 SOURCE="${BASH_SOURCE[0]}"
-while [ -h "$SOURCE" ]
+while [[ -h "$SOURCE" ]]
 do
 	# resolve $SOURCE until the file is no longer a symlink
 	DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
@@ -23,32 +23,24 @@ do_exit()
         STATUS=${1:-0}
         REASON=${2}
 
-        if [ -n "${REASON}" ]
-        then
-                echo "${REASON}"
-        fi
+        [[ -n "${REASON}" ]] && echo "${REASON}"
 
-        if [ ${DO_RETURN} -eq 1 ];
-        then
-                return $STATUS
-        else
-                exit $STATUS
-        fi
+        [[ ${DO_RETURN} -eq 1 ]] && return $STATUS || exit $STATUS
 }
 
 unmanage_interface() {
 
-	if [ -s /etc/NetworkManager/NetworkManager.conf ]
+	if [[ -s /etc/NetworkManager/NetworkManager.conf ]]
 	then
 	        UNMANAGED=$(fgrep unmanaged-devices /etc/NetworkManager/NetworkManager.conf)
 		KEYFILE=$(fgrep "[keyfile]" /etc/NetworkManager/NetworkManager.conf)
 
-		if [ -z "${KEYFILE}" ] 
+		if [[ -z "${KEYFILE}" ]]
 		then
 			echo "[keyfile]" >> /etc/NetworkManager/NetworkManager.conf
 			echo "unmanaged-devices=mac:${MAC}" >> /etc/NetworkManager/NetworkManager.conf
 
-		elif [ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]
+		elif [[ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]]
 		then
 	                ${SED} "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
 		else
@@ -62,7 +54,7 @@ unmanage_interface() {
 }
 
 dhcpd_reconf() {
-	if [ -n "${BRIDGEAP_NET}" ]
+	if [[ -n "${BRIDGEAP_NET}" ]]
 	then
 		${SED} "s/^subnet.*netmask.*/subnet ${BRIDGEAP_NET} netmask 255.255.255.0 {/" ${BRIDGEAP_DHCP}
 		${SED} "s/range.*/range ${BRIDGEAP_NET%0}5 ${BRIDGEAP_NET%0}250;/" ${BRIDGEAP_DHCP}
@@ -70,29 +62,25 @@ dhcpd_reconf() {
 		${SED} "s/routers.*/routers ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
 		${SED} "s/\(fixed-address\).*/\1 ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
 	fi
-	test -n "${DNS_IPS}" && ${SED} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
-	test -n "${MAC}" && ${SED} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
+	[[ -n "${DNS_IPS}" ]] && ${SED} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
+	[[ -n "${MAC}" ]] && ${SED} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
 
 }
 
 hostapd_reconf() {
-	test -n "${WPA_CHANNEL}" && ${SED} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
-	test -n "${WPA_PASS}" && ${SED} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
-	test -n "${SSID}" && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
+	[[ -n "${WPA_CHANNEL}" ]] && ${SED} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
+	[[ -n "${WPA_PASS}" ]] && ${SED} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
+	[[ -n "${SSID}" ]] && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
 }
 
 #############################
 
 start() {
-	if [ "${INSIDE}" = "${OUTSIDE}" ]
-	then
-                echo "Conflicting interface configuration"
-                do_exit 1
-        fi
+	[[ "${INSIDE}" = "${OUTSIDE}" ]] && do_exit 1 "Conflicting interface configuration"
 
         dhcpd_reconf
 
-        if [ -n "${WIFI}" -a -z "$( pgrep -f ${BRIDGEAP_CONF##*/} )" ]
+        if [[ -n "${WIFI}" -a -z "$( pgrep -f ${BRIDGEAP_CONF##*/} )" ]]
         then
                 unmanage_interface
                 hostapd_reconf
@@ -100,38 +88,36 @@ start() {
                 # update the config for the 'current' wifi interface
                 ${SED} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
 		ifconfig ${WIFI} up
-                if [ ${IGNORE_MODE:-0} -eq 0 ]
+                if [[ ${IGNORE_MODE:-0} -eq 0 ]]
 		then
 			iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
 		fi
-                test -x /usr/sbin/hostapd && /usr/sbin/hostapd -B ${BRIDGEAP_CONF} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
+                [[ -x /usr/sbin/hostapd ]] && /usr/sbin/hostapd -B ${BRIDGEAP_CONF} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
 	else
 	        ip link set dev ${INSIDE} up
         fi
 
         ip -4 addr add dev ${INSIDE} ${BRIDGEAP_NET%0}1/24 broadcast ${BRIDGEAP_NET%0}255
 
-        if [ ! -r ${BRIDGEAP_LEASES} ]
-        then
-                touch ${BRIDGEAP_LEASES}
-        fi
+        [[ -r ${BRIDGEAP_LEASES} ]] || touch ${BRIDGEAP_LEASES}
 
 	DHCP_VER=$( test -x /usr/sbin/dhcpd && /usr/sbin/dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
 
-	test -z "${DHCP_VER}" && do_exit 1 "Failed to locate dhcpd"
+	[[ -z "${DHCP_VER}" ]] && do_exit 1 "Failed to locate dhcpd"
 
-	if [ ${DHCP_VER} -gt 422 ]
+	if [[ ${DHCP_VER} -gt 422 ]]
 	then
 		DUSER="-user ${DHCP_USER}"
 		DGROUP="-group ${DHCP_GROUP}"
 	fi
 
-        test -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" &&  /usr/sbin/dhcpd  \
+        [[ -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" ]] &&  \
+		/usr/sbin/dhcpd  \
 			-4 ${DUSER} ${DGROUP} \
 			-cf ${BRIDGEAP_DHCP} -lf ${BRIDGEAP_LEASES} \
 			-pf ${BRIDGEAP_DHCP_PIDF} ${INSIDE}
 
-	test $? -eq 0 || do_exit 1 "dhcp server failed to start"
+	[[ $? -eq 0 ]] || do_exit 1 "dhcp server failed to start"
 
 	iptables -A FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
 	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
@@ -148,20 +134,14 @@ stop() {
         iptables -t nat -D POSTROUTING -s ${BRIDGEAP_NET}/24 -o ${OUTSIDE} -j MASQUERADE
 
 	PID=$( pgrep -f ${BRIDGEAP_CONF##*/} )
-	if [ -n "${PID}" ]
-	then
-		kill -9 ${PID}
-	fi
+	[[ -n "${PID}" ]] && kill -9 ${PID}
 
 	PID=$( pgrep -f "dhcpd.*${INSIDE}" )
-	if [ -n "${PID}" ]
-	then
-		kill -9 ${PID}
-	fi
+	[[ -n "${PID}" ]] && kill -9 ${PID}
 
-	if [ ${IGNORE_MODE:-0} -eq 0 ]
+	if [[ ${IGNORE_MODE:-0} -eq 0 ]]
 	then
-		test -n "${WIFI}" && iwconfig ${WIFI} mode Managed
+		[[ -n "${WIFI}" ]] && iwconfig ${WIFI} mode Managed
 	fi
 	ifconfig ${INSIDE} 0.0.0.0 down
 }
@@ -174,15 +154,15 @@ check_outside() {
 
 ################################
 
-if [ -r "/etc/bridgeap/bridgeap.conf" ]
+if [[ -r "/etc/bridgeap/bridgeap.conf" ]]
 then
         . /etc/bridgeap/bridgeap.conf
 
-elif [ -r "/etc/bridgeap.conf" ]
+elif [[ -r "/etc/bridgeap.conf" ]]
 then
         . /etc/bridgeap.conf
 
-elif [ -r "${PDIR}/bridgeap.conf" ]
+elif [[ -r "${PDIR}/bridgeap.conf" ]]
 then
         . ${PDIR}/bridgeap.conf
 else
@@ -228,12 +208,12 @@ NUM_WIFIS=${#NUM_WIFIS[@]}
 NUM_ETHS=( ${ETHS} )
 NUM_ETHS=${#NUM_ETHS[@]}
 
-if [ ${NUM_WIFIS} -eq 0 -a ${NUM_ETHS} -eq 0 ]
+if [[ ${NUM_WIFIS} -eq 0 -a ${NUM_ETHS} -eq 0 ]]
 then
 	do_exit 1 "no internal interface available, aborting"
 fi
 
-if [ ${NUM_WIFIS} -gt 0 -a ${NUM_ETHS} -gt 0 ]
+if [[ ${NUM_WIFIS} -gt 0 -a ${NUM_ETHS} -gt 0 ]]
 then
 	do_exit 1 "both wifi and eth are available, can't auto-decide. aborting"
 fi
