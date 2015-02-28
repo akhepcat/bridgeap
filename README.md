@@ -10,3 +10,6 @@ Use case:
   The sky is the limit!
 
 
+This script was originally written for debian/ubuntu platforms, but should be portable to anything.
+
+If you are missing any prerequisite packages, you'll be informed at script startup.
