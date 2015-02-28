@@ -33,12 +33,14 @@ do_exit()
 
 precheck() {
 
-	[[ -z "$(which ip)" ]] && do_exit 1 "iproute2 not installed"
-	[[ -z "$(which dhcpd)" ]] && do_exit 1 "dhcp server not installed"
-	[[ -z "$(which hostapd)" ]] && do_exit 1 "hostapd not installed"
-	[[ -z "$(which ifconfig)" ]] && do_exit 1 "net-tools not installed"
-	[[ -z "$(which iwconfig)" ]] && do_exit 1 "wireless-tools not installed"
-	[[ -z "$(which iptables)" ]] && do_exit 1 "iptables not installed"
+	[[ -z "$(which ip)" ]] && FAIL=1 && echo "iproute2 not installed"
+	[[ -z "$(which dhcpd)" ]] && FAIL=1 && echo "dhcp server not installed"
+	[[ -z "$(which hostapd)" ]] && FAIL=1 && echo "hostapd not installed"
+	[[ -z "$(which ifconfig)" ]] && FAIL=1 && echo "net-tools not installed"
+	[[ -z "$(which iwconfig)" ]] && FAIL=1 && echo "wireless-tools not installed"
+	[[ -z "$(which iptables)" ]] && FAIL=1 && echo "iptables not installed"
+
+	[[ ${FAIL:-0} -gt 0 ]] && do_exit 1
 }
 
 unmanage_interface() {
