@@ -80,7 +80,7 @@ start() {
 
         dhcpd_reconf
 
-        if [[ -n "${WIFI}" -a -z "$( pgrep -f ${BRIDGEAP_CONF##*/} )" ]]
+        if [ -n "${WIFI}" -a -z "$( pgrep -f ${BRIDGEAP_CONF##*/} )" ]
         then
                 unmanage_interface
                 hostapd_reconf
@@ -169,20 +169,25 @@ else
         do_exit 1 "You must create a bridgeap.conf file in ${PDIR}, /etc/, or /etc/bridgeap/"
 fi
 
-if [[ ${SPIN_UNTIL_UP} -eq 0 ]]
+check_outside
+
+if [[ ${SPIN_UNTIL_UP} -ge 2 ]]
 then
-	check_outside
-elif [[ ${SPIN_UNTIL_UP} -ge 2 ]]
+	if [[ -z "${OUTSIDE}" ]]
+	then
+		sleep ${SPIN_UNTIL_UP}
+		check_outside
+	fi
+elif [[ ${SPIN_UNTIL_UP} -eq 1 ]]
 then
-	sleep ${SPIN_UNTIL_UP}
-	check_outside
-else
 	# loop forever until we're up!  Check every 5 seconds...
 	while [[ -z "${OUTSIDE}" ]]
 	do
 		sleep 5
 		check_outside
 	done
+# else
+#	no-op
 fi
 
 [[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
@@ -208,12 +213,12 @@ NUM_WIFIS=${#NUM_WIFIS[@]}
 NUM_ETHS=( ${ETHS} )
 NUM_ETHS=${#NUM_ETHS[@]}
 
-if [[ ${NUM_WIFIS} -eq 0 -a ${NUM_ETHS} -eq 0 ]]
+if [ ${NUM_WIFIS} -eq 0 -a ${NUM_ETHS} -eq 0 ]
 then
 	do_exit 1 "no internal interface available, aborting"
 fi
 
-if [[ ${NUM_WIFIS} -gt 0 -a ${NUM_ETHS} -gt 0 ]]
+if [ ${NUM_WIFIS} -gt 0 -a ${NUM_ETHS} -gt 0 ]
 then
 	do_exit 1 "both wifi and eth are available, can't auto-decide. aborting"
 fi
