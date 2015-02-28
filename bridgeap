@@ -166,6 +166,11 @@ stop() {
 	ifconfig ${INSIDE} 0.0.0.0 down
 }
 
+check_outside() {
+	ROUTE="$(ip -4 route show default scope global | grep -v "dev[[:space:]]*br" )" # ignore bridges
+	DEFROUTE=${ROUTE##*dev }
+	OUTSIDE=${DEFROUTE%% *}
+}
 
 ################################
 
@@ -184,10 +189,21 @@ else
         do_exit 1 "You must create a bridgeap.conf file in ${PDIR}, /etc/, or /etc/bridgeap/"
 fi
 
-
-ROUTE="$(ip -4 route show default scope global | grep -v "dev[[:space:]]*br" )" # ignore bridges
-DEFROUTE=${ROUTE##*dev }
-OUTSIDE=${DEFROUTE%% *}
+if [[ ${SPIN_UNTIL_UP} -eq 0 ]]
+then
+	check_outside
+elif [[ ${SPIN_UNTIL_UP} -ge 2 ]]
+then
+	sleep ${SPIN_UNTIL_UP}
+	check_outside
+else
+	# loop forever until we're up!  Check every 5 seconds...
+	while [[ -z "${OUTSIDE}" ]]
+	do
+		sleep 5
+		check_outside
+	done
+fi
 
 [[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
 
