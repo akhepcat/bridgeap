@@ -13,3 +13,5 @@ Use case:
 This script was originally written for debian/ubuntu platforms, but should be portable to anything.
 
 If you are missing any prerequisite packages, you'll be informed at script startup.
+
+FAQ on the wiki: https://github.com/akhepcat/bridgeap/wiki
