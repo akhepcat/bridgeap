@@ -80,9 +80,9 @@ dhcpd_reconf() {
 	[[ -n "${DNS_IPS}" ]] && ${SED} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
 	[[ -n "${MAC}" ]] && ${SED} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
 
-	[[ -s /etc/apparmor.d/local/usr.sbin.dhcpd ]] && \
-		[[ -z "$(grep $BRIDGEAP_DHCP_PIDF /etc/apparmor.d/local/usr.sbin.dhcpd)" ]] && \
-		echo "${BRIDGEAP_DHCP_PIDF} rw," >> /etc/apparmor.d/local/usr.sbin.dhcpd && \
+	[[ -d /etc/apparmor.d/dhcpd.d ]] && \
+		echo "${BRIDGEAP_DHCP} r," > /etc/apparmor.d/dhcpd.d/bridgeap && \
+		echo "${BRIDGEAP_DHCP_PIDF} lmkwr," >> /etc/apparmor.d/dhcpd.d/bridgeap && \
 			service apparmor restart
 }
 
@@ -148,6 +148,7 @@ stop() {
 	echo 0 >/proc/sys/net/ipv4/conf/all/forwarding
 
 	check_inside
+	check_outside
 
 	[[ -z "${INSIDE}" ]] && do_exit 1 "Can't find active inside interface"
 	
