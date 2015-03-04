@@ -31,6 +31,11 @@ do_exit()
         [[ ${DO_RETURN} -eq 1 ]] && return $STATUS || exit $STATUS
 }
 
+auto_update() {
+	cd ${PDIR} && git pull && exec ${PDIR}/${PROG}
+	do_exit 1 "Couldn't auto-update"
+}
+
 precheck() {
 
 	[[ -z "$(which ip)" ]] && FAIL=1 && echo "iproute2 not installed"
@@ -209,6 +214,8 @@ prestart() {
 
 	[[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
 
+	[[ -n "${AUTO_UPDATE}" ]] && auto_update
+
 	# First look for any WiFi interfaces...
 	WIFIS=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
 
@@ -277,8 +284,10 @@ case $1 in
                 ;;
         restart|reload) stop; sleep 2; start
                 ;;
+	update) auto_update
+		;;
         *) prestart ;
-	   echo "usage: ${PROG} [start|stop|restart|reload" ;
+	   echo "usage: ${PROG} [start|stop|restart|reload|update" ;
 	   echo -e "\t\t bridges outside (${OUTSIDE}) to inside (${INSIDE})";
                 ;;
 esac
