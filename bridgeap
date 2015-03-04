@@ -276,9 +276,9 @@ case $1 in
                 ;;
         restart|reload) stop; sleep 2; start
                 ;;
-        *)
-echo "usage: ${PROG} [start|stop|restart|reload" ;
-echo -e "\t\t bridges outside (${OUTSIDE}) to inside (${INSIDE})";
+        *) prestart ;
+	   echo "usage: ${PROG} [start|stop|restart|reload" ;
+	   echo -e "\t\t bridges outside (${OUTSIDE}) to inside (${INSIDE})";
                 ;;
 esac
 
