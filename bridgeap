@@ -36,7 +36,7 @@ auto_update() {
 	if [ $? -eq 0 ]
 	then
 		# up to date, so
-		continue
+		break
 	elif [ $? -eq 1 ]
 	then
 		# we updated, need to reload
