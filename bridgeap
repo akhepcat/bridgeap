@@ -80,6 +80,10 @@ dhcpd_reconf() {
 	[[ -n "${DNS_IPS}" ]] && ${SED} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
 	[[ -n "${MAC}" ]] && ${SED} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
 
+	[[ -s /etc/apparmor.d/local/usr.sbin.dhcpd ]] && \
+		[[ -z "$(grep $BRIDGEAP_DHCP_PIDF /etc/apparmor.d/local/usr.sbin.dhcpd)" ]] && \
+		echo "${BRIDGEAP_DHCP_PIDF} rw," >> /etc/apparmor.d/local/usr.sbin.dhcpd && \
+			service apparmor restart
 }
 
 hostapd_reconf() {
@@ -93,10 +97,10 @@ start() {
 	[[ "${INSIDE}" = "${OUTSIDE}" ]] && do_exit 1 "Conflicting interface configuration"
 
         dhcpd_reconf
+	unmanage_interface
 
         if [ -n "${WIFI}" -a -z "$( pgrep -f ${BRIDGEAP_CONF##*/} )" ]
         then
-                unmanage_interface
                 hostapd_reconf
 
                 # update the config for the 'current' wifi interface
@@ -143,21 +147,34 @@ start() {
 stop() {
 	echo 0 >/proc/sys/net/ipv4/conf/all/forwarding
 
+	check_inside
+
+	[[ -z "${INSIDE}" ]] && do_exit 1 "Can't find active inside interface"
+	
         iptables -D FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
         iptables -D FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
         iptables -t nat -D POSTROUTING -s ${BRIDGEAP_NET}/24 -o ${OUTSIDE} -j MASQUERADE
 
-	PID=$( pgrep -f ${BRIDGEAP_CONF##*/} )
-	[[ -n "${PID}" ]] && kill -9 ${PID}
 
 	PID=$( pgrep -f "dhcpd.*${INSIDE}" )
+	[[ -s ${BRIDGEAP_DHCP_PIDF} ]] && FPID=$(cat ${BRIDGEAP_DHCP_PIDF})
+	[[ -n "$FPID" ]] && PID=${$FPID}
+
 	[[ -n "${PID}" ]] && kill -9 ${PID}
 
-	if [[ ${IGNORE_MODE:-0} -eq 0 ]]
+	#disable hostapd, if it's running, and use that running status to tell us to unconfig the wifi interface
+	PID=$( pgrep -f ${BRIDGEAP_CONF##*/} )
+	if [ -n "${PID}" -a ${IGNORE_MODE:-0} -eq 0 ]
 	then
-		[[ -n "${WIFI}" ]] && iwconfig ${WIFI} mode Managed
+		iwconfig ${INSIDE} mode Managed
 	fi
+	[[ -n "${PID}" ]] && kill -9 ${PID}
+
 	ifconfig ${INSIDE} 0.0.0.0 down
+}
+
+check_inside() {
+	INSIDE="$(ip -4 route show ${BRIDGEAP_NET}/24 | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' )"
 }
 
 check_outside() {
@@ -165,6 +182,72 @@ check_outside() {
 	DEFROUTE=${ROUTE##*dev }
 	OUTSIDE=${DEFROUTE%% *}
 }
+
+prestart() {
+
+	check_outside
+
+	if [[ ${SPIN_UNTIL_UP} -ge 2 ]]
+	then
+		if [[ -z "${OUTSIDE}" ]]
+		then
+			sleep ${SPIN_UNTIL_UP}
+			check_outside
+		fi
+	elif [[ ${SPIN_UNTIL_UP} -eq 1 ]]
+	then
+		# loop forever until we're up!  Check every 5 seconds...
+		while [[ -z "${OUTSIDE}" ]]
+		do
+			sleep 5
+			check_outside
+		done
+	# else
+	#	no-op
+	fi
+
+	[[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
+
+	# First look for any WiFi interfaces...
+	WIFIS=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
+
+	[[ 1 -eq ${AVOID_DOWN:-0} ]] && AVOID_DOWN="NO.CARRIER|"
+	ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
+
+
+	# automagically decide if we're wifi->wifi, wifi->eth, or eth->wifi, as much as possible, ignoring bridges
+	ROUTED_IFS="$(ip route show scope link | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
+
+	for RIF in ${ROUTED_IFS}
+	do
+		# remove any interfaces that match an active routing interface
+		WIFIS="${WIFIS//$RIF}"
+		ETHS="${ETHS//$RIF}"
+	done
+	NUM_WIFIS=( ${WIFIS} )
+	NUM_WIFIS=${#NUM_WIFIS[@]}
+	NUM_ETHS=( ${ETHS} )
+	NUM_ETHS=${#NUM_ETHS[@]}
+
+	if [ ${NUM_WIFIS} -eq 0 -a ${NUM_ETHS} -eq 0 ]
+	then
+		do_exit 1 "no internal interface available, aborting"
+	fi
+
+	if [ ${NUM_WIFIS} -gt 0 -a ${NUM_ETHS} -gt 0 ]
+	then
+		do_exit 1 "both wifi and eth are available, can't auto-decide. aborting"
+	fi
+
+	[[ ${NUM_WIFIS} -gt 1 ]] && do_exit 1 "Too many available WIFI interfaces for automagic determination"
+	[[ ${NUM_ETHS} -gt 1 ]] && do_exit 1 "Too many available ETH interfaces for automagic determination"
+
+	WIFI=${WIFIS}
+	INSIDE="${WIFI}${ETHS}"
+
+	MAC="$(ip link show ${INSIDE} | grep ether | awk '{print $2}')"
+}
+
 
 ################################
 
@@ -186,70 +269,8 @@ else
         do_exit 1 "You must create a bridgeap.conf file in ${PDIR}, /etc/, or /etc/bridgeap/"
 fi
 
-check_outside
-
-if [[ ${SPIN_UNTIL_UP} -ge 2 ]]
-then
-	if [[ -z "${OUTSIDE}" ]]
-	then
-		sleep ${SPIN_UNTIL_UP}
-		check_outside
-	fi
-elif [[ ${SPIN_UNTIL_UP} -eq 1 ]]
-then
-	# loop forever until we're up!  Check every 5 seconds...
-	while [[ -z "${OUTSIDE}" ]]
-	do
-		sleep 5
-		check_outside
-	done
-# else
-#	no-op
-fi
-
-[[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
-
-# First look for any WiFi interfaces...
-WIFIS=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
-
-[[ 1 -eq ${AVOID_DOWN:-0} ]] && AVOID_DOWN="NO.CARRIER|"
-ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
-
-
-# automagically decide if we're wifi->wifi, wifi->eth, or eth->wifi, as much as possible, ignoring bridges
-ROUTED_IFS="$(ip route show scope link | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
-
-for RIF in ${ROUTED_IFS}
-do
-	# remove any interfaces that match an active routing interface
-	WIFIS="${WIFIS//$RIF}"
-	ETHS="${ETHS//$RIF}"
-done
-NUM_WIFIS=( ${WIFIS} )
-NUM_WIFIS=${#NUM_WIFIS[@]}
-NUM_ETHS=( ${ETHS} )
-NUM_ETHS=${#NUM_ETHS[@]}
-
-if [ ${NUM_WIFIS} -eq 0 -a ${NUM_ETHS} -eq 0 ]
-then
-	do_exit 1 "no internal interface available, aborting"
-fi
-
-if [ ${NUM_WIFIS} -gt 0 -a ${NUM_ETHS} -gt 0 ]
-then
-	do_exit 1 "both wifi and eth are available, can't auto-decide. aborting"
-fi
-
-[[ ${NUM_WIFIS} -gt 1 ]] && do_exit 1 "Too many available WIFI interfaces for automagic determination"
-[[ ${NUM_ETHS} -gt 1 ]] && do_exit 1 "Too many available ETH interfaces for automagic determination"
-
-WIFI=${WIFIS}
-INSIDE="${WIFI}${ETHS}"
-
-MAC="$(ip link show ${INSIDE} | grep ether | awk '{print $2}')"
-
 case $1 in
-        start) start
+        start) prestart && start
                 ;;
         stop) stop
                 ;;
