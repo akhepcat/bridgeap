@@ -50,7 +50,7 @@ auto_update() {
 precheck() {
 
 	[[ -z "$(which ip)" ]] && FAIL=1 && echo "iproute2 not installed"
-	[[ -z "$(which dhcpd)" ]] && FAIL=1 && echo "dhcp server not installed"
+	[[ -z "$(which dhcpd)" ]] && FAIL=1 && echo "isc-dhcp-server not installed"
 	[[ -z "$(which hostapd)" ]] && FAIL=1 && echo "hostapd not installed"
 	[[ -z "$(which ifconfig)" ]] && FAIL=1 && echo "net-tools not installed"
 	[[ -z "$(which iwconfig)" ]] && FAIL=1 && echo "wireless-tools not installed"
