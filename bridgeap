@@ -39,9 +39,12 @@ auto_update() {
 		return 0
 	elif [ $? -eq 1 ]
 	then
-		# we updated, need to reload
-		git pull
-		exec ${PDIR}/${PROG}
+		if [ -r ${PDIR}/.git/index ]
+		then
+			# we updated, need to reload
+			git pull
+			exec ${PDIR}/${PROG}
+		fi
 	else
 		do_exit 1 "Couldn't auto-update"
 	fi
