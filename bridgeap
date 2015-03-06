@@ -1,10 +1,10 @@
-#/bin/sh
+#/bin/bash
 PROG="${0##*/}"
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 
 ## this code snippet is taken from Dan Dascalescu's response on
 ## http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
-SOURCE="${BASH_SOURCE[0]}"
+[[ -n "${BASH_SOURCE}" ]] && SOURCE="${BASH_SOURCE[0]}" || SOURCE=$(dirname $0)
 while [[ -h "$SOURCE" ]]
 do
 	# resolve $SOURCE until the file is no longer a symlink
