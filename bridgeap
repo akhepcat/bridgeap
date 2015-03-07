@@ -2,9 +2,11 @@
 PROG="${0##*/}"
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 
+test -z "${BASH_SOURCE}" && exec bash "$0" "$*"
+
 ## this code snippet is taken from Dan Dascalescu's response on
 ## http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
-[[ -n "${BASH_SOURCE}" ]] && SOURCE="${BASH_SOURCE[0]}" || SOURCE=$(dirname $0)
+SOURCE="${BASH_SOURCE[0]}"
 while [[ -h "$SOURCE" ]]
 do
 	# resolve $SOURCE until the file is no longer a symlink
@@ -228,7 +230,7 @@ prestart() {
 
 	[[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
 
-	[[ -n "${AUTO_UPDATE}" ]] && auto_update
+	if [ -n "${AUTO_UPDATE}" -a ${AUTO_UPDATE} -eq 1 ]; then auto_update; fi
 
 	# First look for any WiFi interfaces...
 	WIFIS=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
