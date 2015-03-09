@@ -74,8 +74,17 @@ cfgcheck() {
 		BRIDGEAP_HOSTAP=${BRIDGEAP_CONF}			# new hotness
 	fi
 
-	test [ -z "${BRIDGEAP_HOSTAP}" -o ! -r "${BRIDGEAP_HOSTAP}" ] && FAIL=1 && echo "can't read hostap config file: ${BRIDGEAP_HOSTAP}"
-	test [ -z "${BRIDGEAP_DHCP}" -o ! -r "${BRIDGEAP_DHCP}" ] && FAIL=1 && echo "can't read dhcp-server config file: ${BRIDGEAP_DHCP}"
+	if [ -z "${BRIDGEAP_HOSTAP}" -o ! -r "${BRIDGEAP_HOSTAP}" ];
+	then
+		FAIL=1
+		echo "can't read hostap config file: ${BRIDGEAP_HOSTAP}"
+	fi
+
+	if [ -z "${BRIDGEAP_DHCP}" -o ! -r "${BRIDGEAP_DHCP}" ];
+	then
+		FAIL=1
+		echo "can't read dhcp-server config file: ${BRIDGEAP_DHCP}"
+	fi
 
 	[[ ${FAIL:-0} -gt 0 ]] && do_exit 1 "Configuration errors encountered"
 }
