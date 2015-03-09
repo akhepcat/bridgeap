@@ -309,7 +309,7 @@ else
         do_exit 1 "You must create a bridgeap.conf file in ${PDIR}, /etc/, or /etc/bridgeap/"
 fi
 
-configchk
+cfgcheck
 
 case $1 in
         start) prestart && start
