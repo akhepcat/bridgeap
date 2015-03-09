@@ -2,7 +2,7 @@
 PROG="${0##*/}"
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 
-test -z "${BASH_SOURCE}" && exec bash "$0" "$*"
+test -z "${BASH_SOURCE}" && exec bash "$0" "$1"
 
 ## this code snippet is taken from Dan Dascalescu's response on
 ## http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
@@ -54,14 +54,30 @@ auto_update() {
 
 precheck() {
 
-	[[ -z "$(which ip)" ]] && FAIL=1 && echo "iproute2 not installed"
-	[[ -z "$(which dhcpd)" ]] && FAIL=1 && echo "isc-dhcp-server not installed"
-	[[ -z "$(which hostapd)" ]] && FAIL=1 && echo "hostapd not installed"
-	[[ -z "$(which ifconfig)" ]] && FAIL=1 && echo "net-tools not installed"
-	[[ -z "$(which iwconfig)" ]] && FAIL=1 && echo "wireless-tools not installed"
-	[[ -z "$(which iptables)" ]] && FAIL=1 && echo "iptables not installed"
+	[[ -z "$(which ip)" ]] && FAIL=1 && echo "ERROR: package iproute2 not installed"
+	[[ -z "$(which dhcpd)" ]] && FAIL=1 && echo "ERROR: package isc-dhcp-server not installed"
+	[[ -z "$(which hostapd)" ]] && FAIL=1 && echo "ERROR: package hostapd not installed"
+	[[ -z "$(which ifconfig)" ]] && FAIL=1 && echo "ERROR: package net-tools not installed"
+	[[ -z "$(which iwconfig)" ]] && FAIL=1 && echo "ERROR: package wireless-tools not installed"
+	[[ -z "$(which iptables)" ]] && FAIL=1 && echo "ERROR: package iptables not installed"
 
-	[[ ${FAIL:-0} -gt 0 ]] && do_exit 1
+	[[ ${FAIL:-0} -gt 0 ]] && do_exit 1 "${PROG} - Prerequsites not found"
+}
+
+
+cfgcheck() {
+	# Check for bad configurations with legacy support, warn with new variable name
+
+	if [ -n "${BRIDGEAP_CONF}" -a -z "${BRIDGEAP_HOSTAP}" ];	# Old busted variable
+	then
+		echo "Update your config file and change BRIDGEAP_CONF to BRIDGEAP_HOSTAP to avoid this warning"
+		BRIDGEAP_HOSTAP=${BRIDGEAP_CONF}			# new hotness
+	fi
+
+	test [ -z "${BRIDGEAP_HOSTAP}" -o ! -r "${BRIDGEAP_HOSTAP}" ] && FAIL=1 && echo "can't read hostap config file: ${BRIDGEAP_HOSTAP}"
+	test [ -z "${BRIDGEAP_DHCP}" -o ! -r "${BRIDGEAP_DHCP}" ] && FAIL=1 && echo "can't read dhcp-server config file: ${BRIDGEAP_DHCP}"
+
+	[[ ${FAIL:-0} -gt 0 ]] && do_exit 1 "Configuration errors encountered"
 }
 
 unmanage_interface() {
@@ -108,9 +124,9 @@ dhcpd_reconf() {
 }
 
 hostapd_reconf() {
-	[[ -n "${WPA_CHANNEL}" ]] && ${SED} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_CONF}
-	[[ -n "${WPA_PASS}" ]] && ${SED} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_CONF}
-	[[ -n "${SSID}" ]] && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_CONF}
+	[[ -n "${WPA_CHANNEL}" ]] && ${SED} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_HOSTAP}
+	[[ -n "${WPA_PASS}" ]] && ${SED} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_HOSTAP}
+	[[ -n "${SSID}" ]] && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_HOSTAP}
 }
 
 
@@ -120,18 +136,18 @@ start() {
         dhcpd_reconf
 	unmanage_interface
 
-        if [ -n "${WIFI}" -a -z "$( pgrep -f ${BRIDGEAP_CONF##*/} )" ]
+        if [ -n "${WIFI}" -a -z "$( pgrep -f ${BRIDGEAP_HOSTAP##*/} )" ]
         then
                 hostapd_reconf
 
                 # update the config for the 'current' wifi interface
-                ${SED} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_CONF}
+                ${SED} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_HOSTAP}
 		ifconfig ${WIFI} up
                 if [[ ${IGNORE_MODE:-0} -eq 0 ]]
 		then
 			iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
 		fi
-                hostapd -B ${BRIDGEAP_CONF} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
+                hostapd -B ${BRIDGEAP_HOSTAP} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
 	else
 	        ip link set dev ${INSIDE} up
         fi
@@ -185,7 +201,7 @@ stop() {
 	[[ -n "${PID}" ]] && kill -9 ${PID}
 
 	#disable hostapd, if it's running, and use that running status to tell us to unconfig the wifi interface
-	PID=$( pgrep -f ${BRIDGEAP_CONF##*/} )
+	PID=$( pgrep -f ${BRIDGEAP_HOSTAP##*/} )
 	if [ -n "${PID}" -a ${IGNORE_MODE:-0} -eq 0 ]
 	then
 		iwconfig ${INSIDE} mode Managed
@@ -293,6 +309,8 @@ else
         do_exit 1 "You must create a bridgeap.conf file in ${PDIR}, /etc/, or /etc/bridgeap/"
 fi
 
+configchk
+
 case $1 in
         start) prestart && start
                 ;;
@@ -309,4 +327,3 @@ case $1 in
 esac
 
 do_exit
-
