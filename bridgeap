@@ -1,6 +1,8 @@
 #/bin/bash
 PROG="${0##*/}"
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+VERSION="1.0"
+GITV=0
 
 test -z "${BASH_SOURCE}" && exec bash "$0" "$1"
 
@@ -231,6 +233,7 @@ check_outside() {
 }
 
 prestart() {
+	GITV=$(cd $PDIR && git show --pretty=format:"%h" -s 2>/dev/null)
 
 	check_outside
 
@@ -302,6 +305,7 @@ prestart() {
 
 # Make sure we have all the required packages installed
 precheck
+GITV=${GITV:-0}
 
 if [[ -r "/etc/bridgeap/bridgeap.conf" ]]
 then
@@ -331,6 +335,7 @@ case $1 in
 		;;
         *) prestart ;
 	   echo "usage: ${PROG} [start|stop|restart|reload|update" ;
+	   echo -e "\t\t version: ${VERSION}.${GITV}" ;
 	   echo -e "\t\t bridges outside (${OUTSIDE}) to inside (${INSIDE})";
                 ;;
 esac
