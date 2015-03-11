@@ -258,7 +258,7 @@ prestart() {
 
 	[[ -z "${OUTSIDE}" ]] && do_exit 1 "No network connectivity, aborting"
 
-	if [ -n "${AUTO_UPDATE}" -a ${AUTO_UPDATE} -eq 1 ]; then auto_update; fi
+	if [ -n "${AUTO_UPDATE}" -a ${AUTO_UPDATE:-0} -eq 1 ]; then auto_update; fi
 
 	# First look for any WiFi interfaces...
 	WIFIS=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
