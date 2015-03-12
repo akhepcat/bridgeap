@@ -1,8 +1,20 @@
 #/bin/bash
+
+### BEGIN INIT INFO
+# Provides:		bridgeap
+# Required-Start:	$remote_fs $syslog
+# Required-Stop:	$remote_fs $syslog
+# Default-Start:	2 3 4 5
+# Default-Stop:		0 1 6
+# Short-Description:	interface bridging (eth|wifi)<>(eth|wifi)
+### END INIT INFO
+
 PROG="${0##*/}"
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 
 test -z "${BASH_SOURCE}" && exec bash "$0" "$1"
+
+[[ -r /lib/lsb/init-functions ]] && . /lib/lsb/init-functions
 
 ## this code snippet is taken from Dan Dascalescu's response on
 ## http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
@@ -19,18 +31,30 @@ PDIR="$( cd -P "$( dirname "$SOURCE" )" && pwd -P )"
 ## end
 
 DO_RETURN=${SHLVL}
+
 SED="sed --follow-symlinks -i"
 
 #############################
 
-do_exit()
-{
+do_exit() {
         STATUS=${1:-0}
-        REASON=${2}
+        REASON="${2}"
 
-        [[ -n "${REASON}" ]] && echo "${REASON}"
+        [[ -n "${REASON}" ]] && do_echo "${REASON}"
 
-        [[ ${DO_RETURN} -eq 1 ]] && return $STATUS || exit $STATUS
+	test run_by_init && log_end_msg ${STATUS}
+
+        [[ ${DO_RETURN:-0} -eq 1 ]] && return ${STATUS} || exit ${STATUS}
+}
+
+# Are we running from init?
+run_by_init() {
+    ([ "$previous" ] && [ "$runlevel" ]) || [ "$runlevel" = S ]
+}
+
+do_echo() {
+	MSG="$*"
+	test run_by_init && log_action_msg "${MSG}" || echo "${MSG}"
 }
 
 auto_update() {
@@ -110,8 +134,22 @@ unmanage_interface() {
 
 		# if we've touched anything, we need to restart NetworkManager
 		service network-manager restart
-	# ELSE NOOP
 	fi
+	if [ -n "$(grep "^iface default inet dhcp" /etc/network/interfaces)" ]
+	then
+		# disable default-dhcp on all interfaces (otherwise we could
+		# try to get a dhcp-address on a managed interface, because bugs
+		${SED} "s/^\(iface default inet dhcp\)/#\1/" /etc/network/interfaces
+	fi
+	if [ -n "$(pgrep ifplugd)" ]
+	then
+		/etc/init.d/ifplugd stop ${INSIDE}
+	fi
+	if [ -n "$(pgrep wpa_wupplicant)" ]
+	then
+		wpa_action ${INSIDE} stop
+	fi
+
 }
 
 dhcpd_reconf() {
@@ -141,6 +179,8 @@ hostapd_reconf() {
 
 start() {
 	[[ "${INSIDE}" = "${OUTSIDE}" ]] && do_exit 1 "Conflicting interface configuration"
+
+	test run_by_init && log_daemon_msg "Starting ${PROG} interface bridging" "${PROG}"
 
         dhcpd_reconf
 	unmanage_interface
@@ -197,6 +237,8 @@ stop() {
 	check_outside
 
 	[[ -z "${INSIDE}" ]] && do_exit 1 "Can't find active inside interface"
+
+	test run_by_init && log_daemon_msg "Stopping ${PROG} interface bridging" "${PROG}"
 	
         iptables -D FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
         iptables -D FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
