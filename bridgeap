@@ -249,7 +249,7 @@ stop() {
 
 	PID=$( pgrep -f "dhcpd.*${INSIDE}" )
 	[[ -s ${BRIDGEAP_DHCP_PIDF} ]] && FPID=$(cat ${BRIDGEAP_DHCP_PIDF})
-	[[ -n "$FPID" ]] && PID=${$FPID}
+	[[ -n "${FPID}" ]] && PID=${FPID}
 
 	[[ -n "${PID}" ]] && kill -9 ${PID}
 
