@@ -16,7 +16,7 @@ GITV=0
 
 test -z "${BASH_SOURCE}" && exec bash "$0" "$1"
 
-[[ -r /lib/lsb/init-functions ]] && . /lib/lsb/init-functions
+[[ -r /lib/lsb/init-functions ]] && test run_by_init && . /lib/lsb/init-functions
 
 ## this code snippet is taken from Dan Dascalescu's response on
 ## http://stackoverflow.com/questions/59895/can-a-bash-script-tell-what-directory-its-stored-in
@@ -32,8 +32,6 @@ done
 PDIR="$( cd -P "$( dirname "$SOURCE" )" && pwd -P )"
 ## end
 
-DO_RETURN=${SHLVL}
-
 SED="sed --follow-symlinks -i"
 
 #############################
@@ -44,19 +42,24 @@ do_exit() {
 
         [[ -n "${REASON}" ]] && do_echo "${REASON}"
 
-	test run_by_init && log_end_msg ${STATUS}
+	run_by_init && log_end_msg ${STATUS}
 
-        [[ ${DO_RETURN:-0} -eq 1 ]] && return ${STATUS} || exit ${STATUS}
+	exit ${STATUS}
 }
 
 # Are we running from init?
 run_by_init() {
-    ([ "$previous" ] && [ "$runlevel" ]) || [ "$runlevel" = S ]
+	if [ -n "${previous}" -a -n "${runlevel}" ]
+	then
+		return 0
+	else
+		return 1
+	fi
 }
 
 do_echo() {
 	MSG="$*"
-	test run_by_init && log_action_msg "${MSG}" || echo "${MSG}"
+	run_by_init && log_action_msg "${MSG}" || echo "${MSG}"
 }
 
 auto_update() {
@@ -182,7 +185,8 @@ hostapd_reconf() {
 start() {
 	[[ "${INSIDE}" = "${OUTSIDE}" ]] && do_exit 1 "Conflicting interface configuration"
 
-	test run_by_init && log_daemon_msg "Starting ${PROG} interface bridging" "${PROG}"
+	MSG="Starting ${PROG} interface bridging"
+	run_by_init && log_daemon_msg "${MSG}" "${PROG}" || echo "${MSG}"
 
         dhcpd_reconf
 	unmanage_interface
@@ -240,7 +244,8 @@ stop() {
 
 	[[ -z "${INSIDE}" ]] && do_exit 1 "Can't find active inside interface"
 
-	test run_by_init && log_daemon_msg "Stopping ${PROG} interface bridging" "${PROG}"
+	MSG="Stopping ${PROG} interface bridging"
+	run_by_init && log_daemon_msg "${MSG}" "${PROG}" || echo "${MSG}"
 	
         iptables -D FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
         iptables -D FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
@@ -347,6 +352,7 @@ prestart() {
 
 # Make sure we have all the required packages installed
 precheck
+
 GITV=${GITV:-0}
 
 if [[ -r "/etc/bridgeap/bridgeap.conf" ]]
