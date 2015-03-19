@@ -308,7 +308,7 @@ prestart() {
 	if [ -n "${AUTO_UPDATE}" -a ${AUTO_UPDATE:-0} -eq 1 ]; then auto_update; fi
 
 	# First look for any WiFi interfaces...
-	WIFIS=$(iwconfig 2>&1| grep -v extensions | grep '^[a-z0-9]' | awk '{print $1}' | grep -v ${OUTSIDE} )
+	WIFIS=$(iwconfig 2>&1 | grep '^[a-z0-9]'| grep -viE 'extensions|monitor'  | awk '{print $1}' | grep -v ${OUTSIDE} )
 
 	[[ 1 -eq ${AVOID_DOWN:-0} ]] && AVOID_DOWN="NO.CARRIER|"
 	ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
