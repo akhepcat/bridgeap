@@ -177,10 +177,10 @@ dhcpd_reconf() {
 
 hostapd_reconf() {
 	[[ -n "${WPA_CHANNEL}" ]] && ${SED} "s/\(channel\)=.*/\1=${WPA_CHANNEL}/" ${BRIDGEAP_HOSTAP}
-	[[ -n "${WPA_PASS}" ]] && ${SED} "s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/" ${BRIDGEAP_HOSTAP}
+	[[ -n "${WPA_PASS}" ]] && ${SED} "s/\(auth_algs\)=.*/\1=1/; s/\(wpa_passphrase\)=.*/\1=${WPA_PASS}/;" ${BRIDGEAP_HOSTAP}
 	[[ -n "${SSID}" ]] && ${SED} "s/\(ssid\)=.*/\1=${SSID}/" ${BRIDGEAP_HOSTAP}
+	[[ -z "${WPA_PASS}" ]] && ${SED} "s/\(auth_algs\)=.*/\1=0/" ${BRIDGEAP_HOSTAP}
 }
-
 
 start() {
 	[[ "${INSIDE}" = "${OUTSIDE}" ]] && do_exit 1 "Conflicting interface configuration"
