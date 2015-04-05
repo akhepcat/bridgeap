@@ -15,3 +15,7 @@ This script was originally written for debian/ubuntu platforms, but should be po
 If you are missing any prerequisite packages, you'll be informed at script startup.
 
 FAQ on the wiki: https://github.com/akhepcat/bridgeap/wiki
+
+some usb wifi adapters may require the addition of "max_usb_current=1"  in /boot/config.txt  in order to
+prevent hotplug->reboot problems.
+
