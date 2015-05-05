@@ -9,13 +9,23 @@ Use case:
   
   The sky is the limit!
 
-
 This script was originally written for debian/ubuntu platforms, but should be portable to anything.
 
 If you are missing any prerequisite packages, you'll be informed at script startup.
 
 FAQ on the wiki: https://github.com/akhepcat/bridgeap/wiki
 
-some usb wifi adapters may require the addition of "max_usb_current=1"  in /boot/config.txt  in order to
-prevent hotplug->reboot problems.
+Raspberry Pi users:
+  Some usb wifi adapters may require the addition of "max_usb_current=1"  in /boot/config.txt
+in order to prevent hotplug->reboot problems.
+
+***
+
+# IPv6
+
+
+IPv6 support has been identified, however it is mostly beyond the scope of bridgeap.  That being said,
+if aiccu is used to provide IPv6 subnets, it should be -possible- to add support for automatically
+starting/restarting aiccu, fetching the subnet information, passing that into the radvd configuration
+and starting that daemon.   If you're interested in this, file a feature request issue in the tracker.
 
