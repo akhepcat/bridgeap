@@ -27,5 +27,9 @@ in order to prevent hotplug->reboot problems.
 IPv6 support has been identified, however it is mostly beyond the scope of bridgeap.  That being said,
 if aiccu is used to provide IPv6 subnets, it should be -possible- to add support for automatically
 starting/restarting aiccu, fetching the subnet information, passing that into the radvd configuration
-and starting that daemon.   If you're interested in this, file a feature request issue in the tracker.
+and starting that daemon.   If you're interested in this, file a feature request issue in the tracker.  
+*update*  aiccu does not support passing the routed netblock information between server and client,
+mostly because the server doesn't have a method to support it.  I've opened a ticket with sixxs for that.
+So, any work is effectively on hold here.
+
 
