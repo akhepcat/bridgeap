@@ -83,14 +83,16 @@ auto_update() {
 
 precheck() {
 
-	[[ -z "$(which ip)" ]] && FAIL=1 && echo "ERROR: package iproute2 not installed"
-	[[ -z "$(which dhcpd)" ]] && FAIL=1 && echo "ERROR: package isc-dhcp-server not installed"
-	[[ -z "$(which hostapd)" ]] && FAIL=1 && echo "ERROR: package hostapd not installed"
-	[[ -z "$(which ifconfig)" ]] && FAIL=1 && echo "ERROR: package net-tools not installed"
-	[[ -z "$(which iwconfig)" ]] && FAIL=1 && echo "ERROR: package wireless-tools not installed"
-	[[ -z "$(which iptables)" ]] && FAIL=1 && echo "ERROR: package iptables not installed"
+	[[ -z "$(which ip)" ]] && FAIL=1 && do_echo "ERROR: package iproute2 not installed"
+	[[ -z "$(which dhcpd)" ]] && FAIL=1 && do_echo "ERROR: package isc-dhcp-server not installed"
+	[[ -z "$(which hostapd)" ]] && FAIL=1 && do_echo "ERROR: package hostapd not installed"
+	[[ -z "$(which ifconfig)" ]] && FAIL=1 && do_echo "ERROR: package net-tools not installed"
+	[[ -z "$(which iwconfig)" ]] && FAIL=1 && do_echo "ERROR: package wireless-tools not installed"
+	[[ -z "$(which iptables)" ]] && FAIL=1 && do_echo "ERROR: package iptables not installed"
+	[[ -z "$(which radvd)" ]] && WARN=1 && do_echo "WARNING: package radvd not installed"
 
 	[[ ${FAIL:-0} -gt 0 ]] && do_exit 1 "${PROG} - Prerequsites not found"
+	[[ ${WARN:-0} -gt 0 ]] && do_echo "${PROG} - Optional prerequsites not found, some features may be broken"
 }
 
 
@@ -99,20 +101,20 @@ cfgcheck() {
 
 	if [ -n "${BRIDGEAP_CONF}" -a -z "${BRIDGEAP_HOSTAP}" ];	# Old busted variable
 	then
-		echo "Update your config file and change BRIDGEAP_CONF to BRIDGEAP_HOSTAP to avoid this warning"
+		do_echo "Update your config file and change BRIDGEAP_CONF to BRIDGEAP_HOSTAP to avoid this warning"
 		BRIDGEAP_HOSTAP=${BRIDGEAP_CONF}			# new hotness
 	fi
 
 	if [ -z "${BRIDGEAP_HOSTAP}" -o ! -r "${BRIDGEAP_HOSTAP}" ];
 	then
 		FAIL=1
-		echo "can't read hostap config file: ${BRIDGEAP_HOSTAP}"
+		do_echo "can't read hostap config file: ${BRIDGEAP_HOSTAP}"
 	fi
 
 	if [ -z "${BRIDGEAP_DHCP}" -o ! -r "${BRIDGEAP_DHCP}" ];
 	then
 		FAIL=1
-		echo "can't read dhcp-server config file: ${BRIDGEAP_DHCP}"
+		do_echo "can't read dhcp-server config file: ${BRIDGEAP_DHCP}"
 	fi
 
 	[[ ${FAIL:-0} -gt 0 ]] && do_exit 1 "Configuration errors encountered"
@@ -182,11 +184,116 @@ hostapd_reconf() {
 	[[ -z "${WPA_PASS}" ]] && ${SED} "s/\(auth_algs\)=.*/\1=0/" ${BRIDGEAP_HOSTAP}
 }
 
+do_aiccu() {
+	# We should always (try to) stop aiccu before starting it again, just in case of config changes
+	[[ -n "${pgrep aiccu}" ]] && aiccu stop
+
+	if [ "$1" = "start" ]
+	then
+		aiccu start
+	fi
+}
+
+gen_radvd_cfg {
+	local __route
+	local __iface
+
+	# zeroize the original configuration.  We're brutal like that, but we warned 'em!
+	echo "" > ${BRIDGEAP_RADVDC}
+
+	for ROUTE in ${ADDROUTE}
+	do
+		if [ -z "${ROUTE##*;*}" ]	# we found an address/port pair
+		then
+			__route=${ROUTE%;*}
+			__iface=${ROUTE#*;}
+
+		elif [ -z "${ROUTE##*/*}" -o -z "${ROUTE##*:*}" -o -z "${ROUTE##*.*}" ]
+		then
+			__route=${ROUTE}
+		fi
+
+		[[ -z "${__iface}" ]] && __iface=${INSIDE}
+
+		cat  >>${BRIDGEAP_RADVDC} <<EOF
+interface ${__iface}
+{
+        AdvSendAdvert on;
+        AdvLinkMTU 1280;
+        MaxRtrAdvInterval 300;
+
+        prefix ${__route}
+        {
+                AdvOnLink on;
+                AdvAutonomous on;
+        };
+};
+
+EOF
+
+	done
+}
+
+do_radvd() {
+
+	[[ -z "${ADDROUTE}" ]] && do_echo "WARNING: can't run radvd with no static routed networks" && return
+
+	if [ "$1" = "start" ]
+	then
+		gen_radvd_cfg
+		service radvd start
+	else
+		service radvd stop
+	fi
+
+}
+
+do_routes() {
+	local __route
+	local __iface
+	local __addr
+	local __cidr
+	local __action
+
+	[[ ${RUN_AICCU:-0} -eq 1 ]] || return
+
+	if [ "$1" = "start" ]
+	then
+		__action="add"
+	else
+		__action="del"
+	fi
+
+	for ROUTE in ${ADDROUTE}
+	do
+		if [ -z "${ROUTE##*;*}" ]	# we found an address/port pair
+		then
+			__route=${ROUTE%;*}
+			__iface=${ROUTE#*;}
+
+		elif [ -z "${ROUTE##*/*}" -o -z "${ROUTE##*:*}" -o -z "${ROUTE##*.*}" ]
+		then
+			__route=${ROUTE}
+		fi
+
+		[[ -z "${__iface}" ]] && __iface=${INSIDE}
+
+# we're not really routing downstream, so don't do this:
+#		ip -6 route add ${__route} dev ${__iface}
+
+# Instead, we need to convert to an interface address
+		__addr=${__route%/*}
+		__cidr=${__route#*/}
+
+		ip -6 addr ${__action} ${__addr}1/${__cidr} dev ${__iface}
+	done
+}
+
 start() {
 	[[ "${INSIDE}" = "${OUTSIDE}" ]] && do_exit 1 "Conflicting interface configuration"
 
 	MSG="Starting ${PROG} interface bridging"
-	run_by_init && log_daemon_msg "${MSG}" "${PROG}" || echo "${MSG}"
+	run_by_init && log_daemon_msg "${MSG}" "${PROG}" || do_echo "${MSG}"
 
         dhcpd_reconf
 	unmanage_interface
@@ -234,6 +341,11 @@ start() {
 	iptables -t nat -A POSTROUTING -s ${BRIDGEAP_NET}/24 -o ${OUTSIDE} -j MASQUERADE
 
 	echo 1 >/proc/sys/net/ipv4/conf/all/forwarding
+
+	[[ ${RUN_AICCU:-0} -eq 1 ]] && do_aiccu start
+	[[ -n "${ADDROUTE}" ]] && do_routes start
+	[[ ${RUN_RADVD:-0} -eq 1 ]] && do_radvd start
+
 }
 
 stop() {
@@ -245,8 +357,12 @@ stop() {
 	[[ -z "${INSIDE}" ]] && do_exit 1 "Can't find active inside interface"
 
 	MSG="Stopping ${PROG} interface bridging"
-	run_by_init && log_daemon_msg "${MSG}" "${PROG}" || echo "${MSG}"
+	run_by_init && log_daemon_msg "${MSG}" "${PROG}" || do_echo "${MSG}"
 	
+	[[ ${RUN_RADVD:-0} -eq 1 ]] && do_radvd stop
+	[[ -n "${ADDROUTE}" ]] && do_routes stop
+	[[ ${RUN_AICCU:-0} -eq 1 ]] && do_aiccu stop
+
         iptables -D FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
         iptables -D FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
         iptables -t nat -D POSTROUTING -s ${BRIDGEAP_NET}/24 -o ${OUTSIDE} -j MASQUERADE
