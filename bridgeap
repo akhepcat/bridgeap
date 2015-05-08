@@ -194,7 +194,7 @@ do_aiccu() {
 	fi
 }
 
-gen_radvd_cfg {
+gen_radvd_cfg() {
 	local __route
 	local __iface
 
