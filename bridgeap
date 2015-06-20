@@ -186,7 +186,7 @@ hostapd_reconf() {
 
 do_aiccu() {
 	# We should always (try to) stop aiccu before starting it again, just in case of config changes
-	[[ -n "${pgrep aiccu}" ]] && aiccu stop
+	[[ -n "$(pgrep aiccu)" ]] && aiccu stop
 
 	if [ "$1" = "start" ]
 	then
