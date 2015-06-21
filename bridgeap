@@ -390,7 +390,7 @@ check_inside() {
 }
 
 check_outside() {
-	ROUTE="$(ip -4 route show default scope global | grep -v "dev[[:space:]]*br" )" # ignore bridges
+	ROUTE="$(ip -4 route show default | grep -v "dev[[:space:]]*br" )" # ignore bridges
 	DEFROUTE=${ROUTE##*dev }
 	OUTSIDE=${DEFROUTE%% *}
 }
