@@ -20,7 +20,7 @@ Raspberry Pi users:
   Some usb wifi adapters may require the addition of "max_usb_current=1"  in /boot/config.txt
 in order to prevent hotplug->reboot problems.
 
-VPN Users:
+\*VPN Users:
   The script should auto-detect your VPN tunnel interface, but you'll need to make sure that you're
 connected prior to launching bridgeap.
 
