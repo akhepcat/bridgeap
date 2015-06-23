@@ -159,6 +159,37 @@ unmanage_interface() {
 
 }
 
+remanage_interface() {
+
+	if [[ -s /etc/NetworkManager/NetworkManager.conf ]]
+	then
+		if [ -e /etc/NetworkManager/NetworkManager.conf -a -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]
+		then
+	                ${SED} "s/\(unmanaged-devices=.*\)mac:${MAC}\(.*\)/\1\2" /etc/NetworkManager/NetworkManager.conf
+		else
+			return
+		fi
+
+		# if we've touched anything, we need to restart NetworkManager
+		service network-manager restart
+	fi
+	if [ -n "$(grep "^iface .* inet manual" /etc/network/interfaces)" ]
+	then
+		# disable default-dhcp on all interfaces (otherwise we could
+		# try to get a dhcp-address on a managed interface, because bugs
+		${SED} "s/^\(iface .* inet \)manual/\1 dhcp/" /etc/network/interfaces
+	fi
+	if [ -n "$(pgrep ifplugd)" ]
+	then
+		/etc/init.d/ifplugd restart ${INSIDE}
+	fi
+	if [ -n "$(pgrep wpa_wupplicant)" ]
+	then
+		wpa_action ${INSIDE} restart
+	fi
+
+}
+
 dhcpd_reconf() {
 	if [[ -n "${BRIDGEAP_NET}" ]]
 	then
@@ -235,15 +266,21 @@ EOF
 }
 
 do_radvd() {
+	local __radvd_pid
 
 	[[ -z "${ADDROUTE}" ]] && do_echo "WARNING: can't run radvd with no static routed networks" && return
 
 	if [ "$1" = "start" ]
 	then
 		gen_radvd_cfg
-		service radvd start
+		do_routes start
+		echo 1 >/proc/sys/net/ipv6/conf/all/forwarding
+		radvd --config=${BRIDGEAP_RADVDC} --username=radvd --logmethod=syslog --facility=local4 --pidfile=/var/run/radvd/radvd-bridgeap.pid
 	else
-		service radvd stop
+		__radvd_pid=$(cat /var/run/radvd/radvd-bridgeap.pid)
+		[[ -n "${__radvd_pid//[^0-9]/}" ]] && kill -9 ${__radvd_pid//[^0-9]/}
+		do_routes stop
+		echo 0 >/proc/sys/net/ipv6/conf/all/forwarding
 	fi
 
 }
@@ -254,8 +291,6 @@ do_routes() {
 	local __addr
 	local __cidr
 	local __action
-
-	[[ ${RUN_AICCU:-0} -eq 1 ]] || return
 
 	if [ "$1" = "start" ]
 	then
@@ -497,6 +532,14 @@ case $1 in
                 ;;
 	update) auto_update
 		;;
+	radvd_start) check_inside && do_radvd start
+		;;
+	radvd_stop) check_inside && do_radvd stop
+		;;
+	radvd_reconfig) check_inside && gen_radvd_cfg
+		;;
+	remanage) remanage_interface
+		;;
         *) prestart ;
 	   echo "usage: ${PROG} [start|stop|restart|reload|update" ;
 	   echo -e "\t\t version: ${VERSION}.${GITV}" ;
@@ -505,3 +548,4 @@ case $1 in
 esac
 
 do_exit
+
