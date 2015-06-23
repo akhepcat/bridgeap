@@ -498,6 +498,11 @@ prestart() {
 	MAC="$(ip link show ${INSIDE} | grep ether | awk '{print $2}')"
 }
 
+usage() {
+	echo "usage: ${PROG} [start|stop|restart|reload|update]" ;
+	echo -e "\t\t version: ${VERSION}.${GITV}" ;
+	echo -e "\t\t bridges outside interface to inside interface";
+}
 
 ################################
 
@@ -540,12 +545,10 @@ case $1 in
 		;;
 	remanage) remanage_interface
 		;;
-        *) prestart ;
-	   echo "usage: ${PROG} [start|stop|restart|reload|update" ;
-	   echo -e "\t\t version: ${VERSION}.${GITV}" ;
-	   echo -e "\t\t bridges outside (${OUTSIDE}) to inside (${INSIDE})";
+	check) prestart
+		;;
+        *) usage
                 ;;
 esac
 
 do_exit
-
