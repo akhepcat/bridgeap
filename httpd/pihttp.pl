@@ -1,21 +1,23 @@
 #!/usr/bin/perl
 # server configuration variables
-
-$ssl_server_key="ssl/myserver.key";
-$ssl_server_cert="ssl/myserver.crt";
+$ssl_server_key="/etc/ssl/private/pitouch-nokey.pem";
+$ssl_server_cert="/etc/ssl/certs/pitouch.pem";
 $log_level=4;
 $ssl_port=8443;
 $tcp_port=0;
 $listeners=10;
 $background=0;
-$prefork=1;
+$prefork=0;
+$dirindex=1;
 
 {
 package MyWebServer;
 
 use HTTP::Server::Simple::CGI::PreFork;
-our @ISA = qw(HTTP::Server::Simple::CGI::PreFork);
 
+our $dirindex;
+
+our @ISA = qw(HTTP::Server::Simple::CGI::PreFork);
 
 my %dispatch = (
     'hello.cgi' => \&resp_hello,
@@ -24,12 +26,10 @@ my %dispatch = (
 
 sub handle_request {
     my ($self, $cgi) = @_;
-
+    
     my $method = $ENV{REQUEST_METHOD}; 
     my $path = $cgi->path_info();
     $path =~ s/^\///s;
-    $path="index.html" if ( $path eq "" );
-    $path =~ s/sitestats/\/srv\/http\/sitestats/;
     
     my $handler = $dispatch{$path};
 
@@ -76,10 +76,14 @@ sub print_content_type {
 sub send_file_response {
     my ($path, $cgi) = @_;
     
+    $path =~ s/sitestats/\/srv\/http\/sitestats/;
+    $path = "index.html" if ( $path eq "" );
+    $path = $path . "index.html" if ( $path =~ (m/\/$/) and ($dirindex > 0) );
+    
     if ( -e $path ) {
         print "HTTP/1.0 200 OK\r\n";
         print_content_type($path);
-        
+                
         open(my $f, "<$path");
         while (<$f>) { print $_ };
         close($f);
@@ -103,6 +107,7 @@ sub resp_hello {
 
 } # end of package MyWebServer
 
+########################################################################
 
 sub start_ssl_only {
   my $place = shift;
@@ -140,12 +145,16 @@ sub start_both {
     );
 }
 
+# import the 'global' config option into the package
+$MyWebServer::dirindex = $dirindex;
+
 my $run="run"; # default to foreground ...
+
 $run="background" if ($background);
 
-if ( $ssl_port gt 0 ) {
+if ( $ssl_port > 0 ) {
     # Definitely start the SSL port
-    if ( $tcp_port gt 0 ) {
+    if ( $tcp_port > 0 ) {
       # Definitely also start the TCP port
       start_both($run);
     } else {
@@ -154,9 +163,9 @@ if ( $ssl_port gt 0 ) {
     }
  } else {
     # No SSL port defined, so...
-    if ( $tcp_port gt 0 ) {
+    if ( $tcp_port > 0 ) {
       start_tcp_only($run);
     } else {
-      print "No listeners! exiting...\n";
+      print(STDERR "No listeners! exiting...\n");
     }
 }
