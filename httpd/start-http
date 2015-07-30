@@ -1,0 +1,4 @@
+#!/bin/bash
+
+screen -dmS pihttp perl pihttp.pl
+

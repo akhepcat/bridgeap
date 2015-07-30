@@ -40,3 +40,11 @@ So, any work is effectively on hold here.
 
 *update 2* I've added some initial support for IPv6 subnet routing based on static configuration,
 as well as using aiccu as an optional provider of the IPv6 route.  Caveat emptor.
+
+
+*** V2  -- what's before alpha state?
+Early attempts at creating a perl-based web-server for monitoring/controlling the bridgeap daemon
+as well as the upstream WiFi connectivity.  Nobody likes ssh'ing and editing /etc/wpa_supplicant.
+You'll need to install one perl module (and it's automatic prerequisites) by running this:
+# sudo perl -MCPAN -e 'install HTTP::Server::Simple::CGI::PreFork'
+
