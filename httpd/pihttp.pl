@@ -29,6 +29,7 @@ sub handle_request {
     my $path = $cgi->path_info();
     $path =~ s/^\///s;
     $path="index.html" if ( $path eq "" );
+    $path =~ s/sitestats/\/srv\/http\/sitestats/;
     
     my $handler = $dispatch{$path};
 
@@ -63,6 +64,8 @@ sub print_content_type {
         print "Content-Type: image/gif\r\n\r\n";
     } elsif ( (m/.jpg$/) || (m/.jpeg$/) ) {
         print "Content-Type: image/jpeg\r\n\r\n";
+    } elsif ( m/.png$/ ) {
+        print "Content-Type: image/png\r\n\r\n";
     } elsif (m/.html$/) {
         print "Content-Type: text/html\r\n\r\n";
     } else {
