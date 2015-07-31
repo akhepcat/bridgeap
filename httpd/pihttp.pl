@@ -3,9 +3,9 @@
 $ssl_server_key="/etc/ssl/private/pitouch-nokey.pem";
 $ssl_server_cert="/etc/ssl/certs/pitouch.pem";
 $log_level=4;
-$ssl_port=8443;
-$tcp_port=0;
-$listeners=10;
+$ssl_port=0;
+$tcp_port=8080;
+$listeners=1;
 $background=0;
 $prefork=0;
 $dirindex=1;
@@ -21,6 +21,7 @@ our @ISA = qw(HTTP::Server::Simple::CGI::PreFork);
 
 my %dispatch = (
     'hello.cgi' => \&resp_hello,
+    'scan.cgi' => \&cgi_wifi_scan,
     # ... handle specific requests, instead of generics...
 );
 
@@ -58,15 +59,15 @@ sub do_404 {
 }
 
 sub print_content_type {
-    my $_ = shift;
+    my $mime = shift;
 
-    if (m/.gif$/) {
+    if ($mime =~ m/.gif$/) {
         print "Content-Type: image/gif\r\n\r\n";
-    } elsif ( (m/.jpg$/) || (m/.jpeg$/) ) {
+    } elsif ( ($mime =~ m/.jpg$/) || ($mime =~ m/.jpeg$/) ) {
         print "Content-Type: image/jpeg\r\n\r\n";
-    } elsif ( m/.png$/ ) {
+    } elsif ( $mime =~ m/.png$/ ) {
         print "Content-Type: image/png\r\n\r\n";
-    } elsif (m/.html$/) {
+    } elsif ($mime =~ m/.html$/) {
         print "Content-Type: text/html\r\n\r\n";
     } else {
         print "Content-Type: text/plain\r\n\r\n";
@@ -104,6 +105,103 @@ sub resp_hello {
           $cgi->h1("Hello $who!"),
           $cgi->end_html;
 }
+
+
+sub cgi_wifi_scan {
+  my $cgi = shift;
+  return if !ref $cgi;
+  
+  my $matches=0;
+  my $iface;
+
+    print $cgi->header,
+          $cgi->start_html("WiFi Scan"),
+          $cgi->h1("Scanning the local wifi, please wait...");
+
+
+  my $iwcmd = "/sbin/iwconfig 2>&1";
+
+  open list, "$iwcmd |";
+  while (<list>) {
+     chomp;
+    if (/^(\S+)\s+(IEEE)\s+(802.11)/) {
+       $iface = $1;
+       $matches ++;
+    }
+  }
+
+  if ($matches != 1) {
+    if ($matches < 1) {
+      print "Can't find any wireless interfaces.\n";
+    } else {
+      print "Too many wireless interfaces for auto-scan.\n";
+    }
+  } else {
+
+      my $apmac = qx|iwgetid -ar|;
+      chomp($apmac);
+
+      print "<!-- found current connection of '$apmac' -->\n";
+      
+      my $stylel=qq|style="text-align:left;"|;
+      my $stylec=qq|style="text-align:center;"|;
+      my $styler=qq|style="text-align:right;"|;
+      print "<table>\n";
+      print "<tr><th $stylel>ESSID</th> <th $stylec>BSSID</th> <th $stylel>Mode</th> <th $styler>Channel</th> <th $styler>Signal Level</th> <th $styler>Encryption</th></tr>\n";
+      $iwlist = "/sbin/iwlist $iface scanning";
+
+      open scan, "$iwlist |";
+      while (<scan>) {
+      if (/^\s+Cell (\S+) - Address: (\S+)/) {
+        $CELL=$1;
+        $ADDRESS=$2;
+        # print "$1 $2";
+        $INLOOP=1;
+      }
+      next if ( $INLOOP < 1 );
+    
+      if (/^\s+ESSID:"(\S+)"/) {
+        $ESSID=$1;
+      } elsif (/^\s+Frequency:\S+ \S+ \(Channel (\S+)\)/) {
+        $CHAN=$1;
+      } elsif (/^\s+Quality=\S+\s+Signal level=(\S+).*/) {
+        $SIGNAL=$1;
+      } elsif (/^\s+Encryption key:(\S+)/) {
+        $ENCRYPTION=$1;
+      } elsif (/^\s+Mode:(\S+)/) {
+       $PRINT=1;
+       $MODE=$1;
+      }
+    
+      if ($INLOOP > 0 and $PRINT >0) {
+       $PRINT=0;
+       $INLOOP=0;
+       
+       if (lc($ADDRESS) eq lc($apmac)) {
+         $strong=qq|color: green;font-weight:bold|;
+         $linkb=""; $linke="";
+       } else {
+         $strong=""; $enc="";
+         $enc = "&enc=yes" if ($ENCRYPTION eq "on");
+         
+         $linkb=qq|<a href="/cgi_connect_ap.cgi?$ADDRESS$enc">|;
+         $linke=qq|</a>|;
+       }
+       $stylel=qq|style="text-align:left; $strong"|;
+       $stylec=qq|style="text-align:center; $strong"|;
+       $styler=qq|style="text-align:right; $strong"|;
+
+       print "<tr><td $stylel >$linkb$ESSID$linke</td> <td $stylec >$ADDRESS</td> <td $stylel >$MODE</td> <td $styler >$CHAN</td> <td $styler >$SIGNAL</td> <td $styler >$ENCRYPTION</td></tr>\n";
+       
+      }
+    }
+    close scan;
+
+    print "</table>\n";
+    print $cgi->end_html;
+
+    }
+  }
 
 } # end of package MyWebServer
 
@@ -169,3 +267,8 @@ if ( $ssl_port > 0 ) {
       print(STDERR "No listeners! exiting...\n");
     }
 }
+
+exit;
+
+#########################################################################
+
