@@ -22,6 +22,7 @@ our @ISA = qw(HTTP::Server::Simple::CGI::PreFork);
 my %dispatch = (
     'hello.cgi' => \&resp_hello,
     'scan.cgi' => \&cgi_wifi_scan,
+    'cgi_connect_ap.cgi' => \&cgi_preconnect,
     # ... handle specific requests, instead of generics...
 );
 
@@ -107,6 +108,34 @@ sub resp_hello {
 }
 
 
+sub cgi_preconnect {
+    my $cgi  = shift;   # CGI.pm object
+    return if !ref $cgi;
+    
+    my $key = $cgi->param('enc');
+    my $bssid = $cgi->param('bssid');
+    
+    print $cgi->header,
+          $cgi->start_html("WiFi Preconnect"),
+          $cgi->h1("WiFi Preconnect!");
+    
+    print "Preparing to connect to bssid: $bssid<br />\n";
+    
+    if ($key ne "yes") {
+      print "No encryption key needed, stand-by for WiFi connection.<br />\n";
+      $cgi->h2("connecting not implemented yet!");
+    } else {
+      print "Encryption key required:<br />\n";
+      print $cgi->start_form( -method=>"POST", -action=>"/connect_wifi.cgi");
+      print $cgi->password_field(-name=>'psk',  -value=>'Wifi Secret',  -size=>30,  -maxlength=>30);
+      print $cgi->submit(-name=>'connect', -value=>'connect');
+      print $cgi->end_form;
+    }
+
+    print $cgi->end_html;
+}
+
+
 sub cgi_wifi_scan {
   my $cgi = shift;
   return if !ref $cgi;
@@ -184,7 +213,7 @@ sub cgi_wifi_scan {
          $strong=""; $enc="";
          $enc = "&enc=yes" if ($ENCRYPTION eq "on");
          
-         $linkb=qq|<a href="/cgi_connect_ap.cgi?$ADDRESS$enc">|;
+         $linkb=qq|<a href="/cgi_connect_ap.cgi?bssid=$ADDRESS$enc">|;
          $linke=qq|</a>|;
        }
        $stylel=qq|style="text-align:left; $strong"|;
