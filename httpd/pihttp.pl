@@ -133,7 +133,7 @@ sub reboot_pi {
           $cgi->start_html("Reboot System"),
           $cgi->h1("Rebooting the system");
 
-    $result=qx|shutdown -r now "Web reboot requested|;
+    $result=qx|shutdown -r now "Web reboot requested"|;
 
     print "shutdown reports: '$result'<br />\n";
     print $cgi->end_html;
@@ -148,7 +148,7 @@ sub halt_pi {
           $cgi->start_html("Shutdown System"),
           $cgi->h1("Shutting down the system");
 
-    $result=qx|shutdown -h -P now "Web shutdown requested|;
+    $result=qx|shutdown -h -P now "Web shutdown requested"|;
 
     print "shutdown reports: '$result'<br />\n";
     print $cgi->end_html;
