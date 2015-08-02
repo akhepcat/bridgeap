@@ -8,3 +8,7 @@ shutdown the BridgeAP service, or possibly do worse.
 Be very careful using it until authentication mechanisims are in place.
 
 *** YOU HAVE BEEN WARNED ***
+
+Additional perl modules:  
+ * libstring-shellquote-perl  
+

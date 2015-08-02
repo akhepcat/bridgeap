@@ -14,6 +14,8 @@ $dirindex=1;
 package MyWebServer;
 
 use HTTP::Server::Simple::CGI::PreFork;
+use Error::Helper;
+use Net::Wireless::802_11::WPA::CLI;
 
 our $dirindex;
 
@@ -26,8 +28,10 @@ my %dispatch = (
     'shutdown.cgi' => \&halt_pi,
     'scan.cgi' => \&cgi_wifi_scan,
     'cgi_connect_ap.cgi' => \&cgi_preconnect,
+    'wpa_list_nets.cgi' => \&wpa_listnet,
     # ... handle specific requests, instead of generics...
 );
+
 
 sub handle_request {
     my ($self, $cgi) = @_;
@@ -108,6 +112,38 @@ sub resp_hello {
           $cgi->start_html("Hello"),
           $cgi->h1("Hello $who!"),
           $cgi->end_html;
+}
+
+sub wpa_listnet {
+    my $cgi  = shift;   # CGI.pm object
+    return if !ref $cgi;
+    my $result;
+    my $wpa = Net::Wireless::802_11::WPA::CLI->new();
+    
+    print $cgi->header,
+          $cgi->start_html("Listing configured networks"),
+          $cgi->h1("Listing configured networks");
+
+    print "<br />\n";
+
+    if( undef($wpa) ){
+        print $cgi->h2("wpa_cli error(opening wpa_cli): " . $wpa->error . "<br />\n");
+        print $wpa->errorString . "<br />\n";
+    } else {
+        my %networks = $wpa->list_networks();
+        if( defined($wpa->error) ){
+            print $cgi->h2("wpa_cli error(listing networks): " . $wpa->error . "<br />\n");
+            print $wpa->errorString . "<br />\n";
+        } else {
+            print "<table>\n";
+            print qq|<tr><th>id</th> <th>SSID</th> <th>BSSID</th> <th>Flags</th></tr>\n|;
+            for my $key (keys(%networks)) {
+                print qq|<tr><td>$key</td> <td>$network{$key}{"ssid"}</td> <td>$network{$key}{"bssid"}</td> <td>$network{$key}{"flags"}</td></tr>\n|;
+            }
+            print "</table><br />\n";
+        }
+    }
+    print $cgi->end_html;
 }
 
 sub stop_bridgeap {
