@@ -21,6 +21,9 @@ our @ISA = qw(HTTP::Server::Simple::CGI::PreFork);
 
 my %dispatch = (
     'hello.cgi' => \&resp_hello,
+    'stop.cgi' => \&stop_bridgeap,
+    'reboot.cgi' => \&reboot_pi,
+    'shutdown.cgi' => \&halt_pi,
     'scan.cgi' => \&cgi_wifi_scan,
     'cgi_connect_ap.cgi' => \&cgi_preconnect,
     # ... handle specific requests, instead of generics...
@@ -107,6 +110,49 @@ sub resp_hello {
           $cgi->end_html;
 }
 
+sub stop_bridgeap {
+    my $cgi  = shift;   # CGI.pm object
+    my $result;
+    return if !ref $cgi;
+    
+    print $cgi->header,
+          $cgi->start_html("Stopping BridgeAP"),
+          $cgi->h1("Stopping BridgeAP");
+
+    $result=qx|/usr/local/bin/bridgeap stop|;
+
+    print "bridgeap reports: '$result'<br />\n";
+    print $cgi->end_html;
+}
+
+sub reboot_pi {
+    my $cgi  = shift;   # CGI.pm object
+    return if !ref $cgi;
+    
+    print $cgi->header,
+          $cgi->start_html("Reboot System"),
+          $cgi->h1("Rebooting the system");
+
+    $result=qx|shutdown -r now "Web reboot requested|;
+
+    print "shutdown reports: '$result'<br />\n";
+    print $cgi->end_html;
+}
+
+
+sub halt_pi {
+    my $cgi  = shift;   # CGI.pm object
+    return if !ref $cgi;
+    
+    print $cgi->header,
+          $cgi->start_html("Shutdown System"),
+          $cgi->h1("Shutting down the system");
+
+    $result=qx|shutdown -h -P now "Web shutdown requested|;
+
+    print "shutdown reports: '$result'<br />\n";
+    print $cgi->end_html;
+}
 
 sub cgi_preconnect {
     my $cgi  = shift;   # CGI.pm object
