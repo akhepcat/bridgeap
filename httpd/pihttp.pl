@@ -13,13 +13,10 @@ $dirindex=1;
 {
 package MyWebServer;
 
-use HTTP::Server::Simple::CGI::PreFork;
-use Error::Helper;
-use Net::Wireless::802_11::WPA::CLI;
+use parent qw(HTTP::Server::Simple::CGI::PreFork Net::Wireless::802_11::WPA::CLI);
 
 our $dirindex;
 
-our @ISA = qw(HTTP::Server::Simple::CGI::PreFork);
 
 my %dispatch = (
     'hello.cgi' => \&resp_hello,
@@ -382,4 +379,3 @@ if ( $ssl_port > 0 ) {
 exit;
 
 #########################################################################
-
