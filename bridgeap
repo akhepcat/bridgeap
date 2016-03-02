@@ -502,12 +502,10 @@ prestart() {
 
 show_ifaces() {
 	echo "Would use  INSIDE=${INSIDE},  and OUTSIDE=${OUTSIDE}"
-
-
 }
 
 usage() {
-	echo "usage: ${PROG} [start|stop|restart|reload|update]" ;
+	echo "usage: ${PROG} [start|stop|restart|reload|update|check]" ;
 	echo -e "\t\t version: ${VERSION}.${GITV}" ;
 	echo -e "\t\t bridges outside interface to inside interface";
 }
