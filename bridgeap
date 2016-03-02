@@ -346,7 +346,7 @@ start() {
 		then
 			iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
 		fi
-                hostapd -B ${BRIDGEAP_HOSTAP} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
+                hostapd -f /tmp/hostapd_${INSIDE}.log -dd -t -B ${BRIDGEAP_HOSTAP} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
 	else
 	        ip link set dev ${INSIDE} up
         fi
