@@ -85,10 +85,10 @@ precheck() {
 
 	[[ -z "$(which ip)" ]] && FAIL=1 && do_echo "ERROR: package iproute2 not installed"
 	[[ -z "$(which dhcpd)" ]] && FAIL=1 && do_echo "ERROR: package isc-dhcp-server not installed"
-	[[ -z "$(which hostapd)" ]] && FAIL=1 && do_echo "ERROR: package hostapd not installed"
 	[[ -z "$(which ifconfig)" ]] && FAIL=1 && do_echo "ERROR: package net-tools not installed"
-	[[ -z "$(which iwconfig)" ]] && FAIL=1 && do_echo "ERROR: package wireless-tools not installed"
 	[[ -z "$(which iptables)" ]] && FAIL=1 && do_echo "ERROR: package iptables not installed"
+	[[ -z "$(which hostapd)" ]] && WARN=1 && do_echo "WARNING: package hostapd not installed"
+	[[ -z "$(which iwconfig)" ]] && WARN=1 && do_echo "WARNING: package wireless-tools not installed"
 	[[ -z "$(which radvd)" ]] && WARN=1 && do_echo "WARNING: package radvd not installed"
 
 	[[ ${FAIL:-0} -gt 0 ]] && do_exit 1 "${PROG} - Prerequsites not found"
@@ -132,7 +132,7 @@ unmanage_interface() {
 			echo "[keyfile]" >> /etc/NetworkManager/NetworkManager.conf
 			echo "unmanaged-devices=mac:${MAC}" >> /etc/NetworkManager/NetworkManager.conf
 
-		elif [[ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]]
+		elif [[ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf | grep -v '#' )" ]]
 		then
 	                ${SED} "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
 		else
@@ -196,8 +196,8 @@ dhcpd_reconf() {
 		${SED} "s/^subnet.*netmask.*/subnet ${BRIDGEAP_NET} netmask 255.255.255.0 {/" ${BRIDGEAP_DHCP}
 		${SED} "s/range.*/range ${BRIDGEAP_NET%0}5 ${BRIDGEAP_NET%0}250;/" ${BRIDGEAP_DHCP}
 		${SED} "s/\(broadcast-address\).*/\1 ${BRIDGEAP_NET%0}255;/" ${BRIDGEAP_DHCP}
-		${SED} "s/routers.*/routers ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
-		${SED} "s/\(fixed-address\).*/\1 ${BRIDGEAP_NET%0}1;/" ${BRIDGEAP_DHCP}
+		${SED} "s/routers.*/routers ${BRIDGEAP_IP};/" ${BRIDGEAP_DHCP}
+		${SED} "s/\(fixed-address\).*/\1 ${BRIDGEAP_IP};/" ${BRIDGEAP_DHCP}
 	fi
 	[[ -n "${DNS_IPS}" ]] && ${SED} "s/\(domain-name-servers\).*/\1 ${DNS_IPS};/" ${BRIDGEAP_DHCP}
 	[[ -n "${MAC}" ]] && ${SED} "s/\(ethernet\).*/\1 ${MAC};/" ${BRIDGEAP_DHCP}
@@ -275,8 +275,6 @@ do_radvd() {
 		gen_radvd_cfg
 		do_routes start
 		echo 1 >/proc/sys/net/ipv6/conf/all/forwarding
-		mkdir -p /var/run/radvd
-		chown radvd /var/run/radvd
 		radvd --config=${BRIDGEAP_RADVDC} --username=radvd --logmethod=syslog --facility=local4 --pidfile=/var/run/radvd/radvd-bridgeap.pid
 	else
 		__radvd_pid=$(cat /var/run/radvd/radvd-bridgeap.pid)
@@ -346,12 +344,12 @@ start() {
 		then
 			iwconfig ${WIFI} mode Master || do_exit 1 "failed to set Master mode"
 		fi
-                hostapd -f /tmp/hostapd_${INSIDE}.log -dd -t -B ${BRIDGEAP_HOSTAP} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
+                hostapd -B ${BRIDGEAP_HOSTAP} 2>/dev/null || do_exit 1 "Failed to start hostapd on interface ${WIFI}, aborting"
 	else
 	        ip link set dev ${INSIDE} up
         fi
 
-        ip -4 addr add dev ${INSIDE} ${BRIDGEAP_NET%0}1/24 broadcast ${BRIDGEAP_NET%0}255
+        ip -4 addr add dev ${INSIDE} ${BRIDGEAP_IP}/24 broadcast ${BRIDGEAP_NET%0}255
 
         [[ -r ${BRIDGEAP_LEASES} ]] || touch ${BRIDGEAP_LEASES}
 
@@ -424,18 +422,20 @@ stop() {
 
 check_inside() {
 	INSIDE="$(ip -4 route show ${BRIDGEAP_NET}/24 | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' )"
+	INSIDE=${BRIDGEAP_INSIDE:-$INSIDE}
 }
 
 check_outside() {
 	ROUTE="$(ip -4 route show default | grep -v "dev[[:space:]]*br" )" # ignore bridges
 	DEFROUTE=${ROUTE##*dev }
 	OUTSIDE=${DEFROUTE%% *}
+	OUTSIDE=${BRIDGEAP_OUTSIDE:-$OUTSIDE}
 }
 
 prestart() {
 	GITV=$(cd $PDIR && git show --pretty=format:"%h" -s 2>/dev/null)
 
-	check_outside
+	[[ -z "${OUTSIDE}" ]] && check_outside
 
 	if [[ ${SPIN_UNTIL_UP} -ge 2 ]]
 	then
@@ -464,10 +464,10 @@ prestart() {
 	WIFIS=$(iwconfig 2>&1 | grep '^[a-z0-9]'| grep -viE 'extensions|monitor'  | awk '{print $1}' | grep -v ${OUTSIDE} )
 
 	[[ 1 -eq ${AVOID_DOWN:-0} ]] && AVOID_DOWN="NO.CARRIER|DOWN|"
-	ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*eth' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
+	ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*e(th|nx)' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
 
 
-	# automagically decide if we're wifi->wifi, wifi->eth, or eth->wifi, as much as possible, ignoring bridges
+	# automagically decide if we're wifi->wifi, wifi->eth, eth->wifi, or eth->eth, as much as possible, ignoring bridges
 	ROUTED_IFS="$(ip route show scope link | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
 
 	for RIF in ${ROUTED_IFS}
@@ -500,12 +500,8 @@ prestart() {
 	MAC="$(ip link show ${INSIDE} | grep ether | awk '{print $2}')"
 }
 
-show_ifaces() {
-	echo "Would use  INSIDE=${INSIDE},  and OUTSIDE=${OUTSIDE}"
-}
-
 usage() {
-	echo "usage: ${PROG} [start|stop|restart|reload|update|check]" ;
+	echo "usage: ${PROG} [start|stop|restart|reload|update]" ;
 	echo -e "\t\t version: ${VERSION}.${GITV}" ;
 	echo -e "\t\t bridges outside interface to inside interface";
 }
@@ -534,6 +530,9 @@ fi
 
 cfgcheck
 
+TIP=${BRIDGEAP_NET%0}1
+BRIDGEAP_IP=${BRIDGEAP_IP:-$TIP}
+
 case $1 in
         start) prestart && start
                 ;;
@@ -551,7 +550,9 @@ case $1 in
 		;;
 	remanage) remanage_interface
 		;;
-	check) prestart && show_ifaces
+	unmanage) prestart && unmanage_interface
+		;;
+	check) prestart
 		;;
         *) usage
                 ;;
