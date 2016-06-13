@@ -132,7 +132,7 @@ unmanage_interface() {
 			echo "[keyfile]" >> /etc/NetworkManager/NetworkManager.conf
 			echo "unmanaged-devices=mac:${MAC}" >> /etc/NetworkManager/NetworkManager.conf
 
-		elif [[ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf)" ]]
+		elif [[ -z "$(fgrep ${MAC} /etc/NetworkManager/NetworkManager.conf | grep -v '#' )" ]]
 		then
 	                ${SED} "s/\(unmanaged-devices\)=.*/\1=mac:${MAC}/" /etc/NetworkManager/NetworkManager.conf
 		else
@@ -422,18 +422,20 @@ stop() {
 
 check_inside() {
 	INSIDE="$(ip -4 route show ${BRIDGEAP_NET}/24 | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' )"
+	INSIDE=${BRIDGEAP_INSIDE:-$INSIDE}
 }
 
 check_outside() {
 	ROUTE="$(ip -4 route show default | grep -v "dev[[:space:]]*br" )" # ignore bridges
 	DEFROUTE=${ROUTE##*dev }
 	OUTSIDE=${DEFROUTE%% *}
+	OUTSIDE=${BRIDGEAP_OUTSIDE:-$OUTSIDE}
 }
 
 prestart() {
 	GITV=$(cd $PDIR && git show --pretty=format:"%h" -s 2>/dev/null)
 
-	check_outside
+	[[ -z "${OUTSIDE}" ]] && check_outside
 
 	if [[ ${SPIN_UNTIL_UP} -ge 2 ]]
 	then
@@ -547,6 +549,8 @@ case $1 in
 	radvd_reconfig) check_inside && gen_radvd_cfg
 		;;
 	remanage) remanage_interface
+		;;
+	unmanage) prestart && unmanage_interface
 		;;
 	check) prestart
 		;;
