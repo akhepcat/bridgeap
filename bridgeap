@@ -275,6 +275,8 @@ do_radvd() {
 		gen_radvd_cfg
 		do_routes start
 		echo 1 >/proc/sys/net/ipv6/conf/all/forwarding
+		mkdir -p /var/run/radvd
+		chown radvd /var/run/radvd
 		radvd --config=${BRIDGEAP_RADVDC} --username=radvd --logmethod=syslog --facility=local4 --pidfile=/var/run/radvd/radvd-bridgeap.pid
 	else
 		__radvd_pid=$(cat /var/run/radvd/radvd-bridgeap.pid)
