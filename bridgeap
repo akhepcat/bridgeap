@@ -503,7 +503,7 @@ prestart() {
 }
 
 usage() {
-	echo "usage: ${PROG} [start|stop|restart|reload|update]" ;
+	echo "usage: ${PROG} [start|stop|restart|reload|update|reconfigure]" ;
 	echo -e "\t\t version: ${VERSION}.${GITV}" ;
 	echo -e "\t\t bridges outside interface to inside interface";
 }
@@ -543,6 +543,8 @@ case $1 in
         restart|reload) stop; sleep 2; start
                 ;;
 	update) auto_update
+		;;
+	reconf*) dhcpd_reconf && hostapd_reconf
 		;;
 	radvd_start) check_inside && do_radvd start
 		;;
