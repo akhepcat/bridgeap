@@ -340,7 +340,7 @@ start() {
                 hostapd_reconf
 
                 # update the config for the 'current' wifi interface
-                ${SED} "s/interface=wlan.*/interface=${WIFI}/" ${BRIDGEAP_HOSTAP}
+                ${SED} "s/interface=.*/interface=${WIFI}/" ${BRIDGEAP_HOSTAP}
 		ifconfig ${WIFI} up
                 if [[ ${IGNORE_MODE:-0} -eq 0 ]]
 		then
@@ -466,8 +466,7 @@ prestart() {
 	WIFIS=$(iwconfig 2>&1 | grep '^[a-z0-9]'| grep -viE 'extensions|monitor'  | awk '{print $1}' | grep -v ${OUTSIDE} )
 
 	[[ 1 -eq ${AVOID_DOWN:-0} ]] && AVOID_DOWN="NO.CARRIER|DOWN|"
-	ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master" | grep -E '\d*:[[:space:]]*e(th|nx)' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"	# ignore the OUTSIDE interface, but list all others
-
+	ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master|${WIFIS// /|}|LOOP" | grep -E '\d*:[[:space:]]' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"  # ignore LOOP, OUTSIDE, and WIFI interface(s), but list all others
 
 	# automagically decide if we're wifi->wifi, wifi->eth, eth->wifi, or eth->eth, as much as possible, ignoring bridges
 	ROUTED_IFS="$(ip route show scope link | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
@@ -500,6 +499,12 @@ prestart() {
 	INSIDE="${WIFI}${ETHS}"
 
 	MAC="$(ip link show ${INSIDE} | grep ether | awk '{print $2}')"
+}
+
+status() {
+	prestart
+	echo "outside=${OUTSIDE}"
+	echo "inside=${INSIDE}"
 }
 
 usage() {
@@ -556,7 +561,7 @@ case $1 in
 		;;
 	unmanage) prestart && unmanage_interface
 		;;
-	check) prestart
+	check|status) status
 		;;
         *) usage
                 ;;
