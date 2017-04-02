@@ -252,11 +252,16 @@ interface ${__iface}
         AdvSendAdvert on;
         AdvLinkMTU 1280;
         MaxRtrAdvInterval 300;
+        AdvManagedFlag on;
+     #   AdvAutonomous on;
+        AdvOtherConfigFlag on;
+        MinRtrAdvInterval 3;
+
 
         prefix ${__route}
         {
                 AdvOnLink on;
-                AdvAutonomous on;
+		AdvRouterAddr on;
         };
 };
 
@@ -464,6 +469,7 @@ prestart() {
 
 	# First look for any WiFi interfaces...
 	WIFIS=$(iwconfig 2>&1 | grep '^[a-z0-9]'| grep -viE 'extensions|monitor'  | awk '{print $1}' | grep -v ${OUTSIDE} )
+	WIFIS=${WIFIS:-zzzzzzzzzzz}
 
 	[[ 1 -eq ${AVOID_DOWN:-0} ]] && AVOID_DOWN="NO.CARRIER|DOWN|"
 	ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master|${WIFIS// /|}|LOOP" | grep -E '\d*:[[:space:]]' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"  # ignore LOOP, OUTSIDE, and WIFI interface(s), but list all others
@@ -477,6 +483,7 @@ prestart() {
 		WIFIS="${WIFIS//$RIF}"
 		ETHS="${ETHS//$RIF}"
 	done
+	WIFIS="${WIFIS//zzzzzzzzzzz}"
 	NUM_WIFIS=( ${WIFIS} )
 	NUM_WIFIS=${#NUM_WIFIS[@]}
 	NUM_ETHS=( ${ETHS} )
