@@ -484,6 +484,17 @@ prestart() {
 		ETHS="${ETHS//$RIF}"
 	done
 	WIFIS="${WIFIS//zzzzzzzzzzz}"
+	if [ ${FORCE_WIFI:-0} = 1 -a ${FORCE_ETH:-0} = 0 ]
+	then
+		unset ETHS
+	elif [ ${FORCE_ETH:-0} = 1 -a ${FORCE_WIFI:-0} = 0 ]
+	then
+		unset WIFIS
+	elif [ ${FORCE_ETH:-0} = 1 -a ${FORCE_WIFI:-0} = 1 ]
+	then
+		echo "WARN: forcing both eth and wifi results in no forcing"
+	fi
+
 	NUM_WIFIS=( ${WIFIS} )
 	NUM_WIFIS=${#NUM_WIFIS[@]}
 	NUM_ETHS=( ${ETHS} )
