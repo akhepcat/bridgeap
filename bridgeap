@@ -360,23 +360,26 @@ start() {
 
         [[ -r ${BRIDGEAP_LEASES} ]] || touch ${BRIDGEAP_LEASES}
 
-	DHCP_VER=$( dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
-
-	[[ -z "${DHCP_VER}" ]] && do_exit 1 "can't determine dhcpd version"
-
-	if [[ ${DHCP_VER} -gt 422 ]]
+	if [[ ${RUN_DHCP} -gt 0 ]]
 	then
-		DUSER="-user ${DHCP_USER}"
-		DGROUP="-group ${DHCP_GROUP}"
+		DHCP_VER=$( dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
+
+		[[ -z "${DHCP_VER}" ]] && do_exit 1 "can't determine dhcpd version"
+
+		if [[ ${DHCP_VER} -gt 422 ]]
+		then
+			DUSER="-user ${DHCP_USER}"
+			DGROUP="-group ${DHCP_GROUP}"
+		fi
+
+	        [[ -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" ]] &&  \
+			dhcpd  \
+				-4 ${DUSER} ${DGROUP} \
+				-cf ${BRIDGEAP_DHCP} -lf ${BRIDGEAP_LEASES} \
+				-pf ${BRIDGEAP_DHCP_PIDF} ${INSIDE}
+
+		[[ $? -eq 0 ]] || do_exit 1 "dhcp server failed to start"
 	fi
-
-        [[ -z "$( pgrep -f \"dhcpd.*${INSIDE}\" )" ]] &&  \
-		dhcpd  \
-			-4 ${DUSER} ${DGROUP} \
-			-cf ${BRIDGEAP_DHCP} -lf ${BRIDGEAP_LEASES} \
-			-pf ${BRIDGEAP_DHCP_PIDF} ${INSIDE}
-
-	[[ $? -eq 0 ]] || do_exit 1 "dhcp server failed to start"
 
 	iptables -A FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
 	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
