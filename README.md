@@ -29,14 +29,5 @@ connected prior to launching bridgeap.
 # IPv6
 
 
-IPv6 support has been identified, however it is mostly beyond the scope of bridgeap.  That being said,
-if aiccu is used to provide IPv6 subnets, it should be -possible- to add support for automatically
-starting/restarting aiccu, fetching the subnet information, passing that into the radvd configuration
-and starting that daemon.   If you're interested in this, file a feature request issue in the tracker.  
-
-*update*  aiccu does not support passing the routed netblock information between server and client,
-mostly because the server doesn't have a method to support it.  I've opened a ticket with sixxs for that.
-So, any work is effectively on hold here.
-
-*update 2* I've added some initial support for IPv6 subnet routing based on static configuration,
-as well as using aiccu as an optional provider of the IPv6 route.  Caveat emptor.
+I've added some initial support for IPv6 subnet routing based on static configuration.  Caveat emptor.
+Since SIXXS is no longer providing an aiccu tunnel endpoint, that option no longer works.
