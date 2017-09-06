@@ -382,7 +382,7 @@ start() {
 	fi
 
 	iptables -A FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
-	iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+        iptables -A FORWARD -d ${BRIDGEAP_NET}/24 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 	iptables -t nat -A POSTROUTING -s ${BRIDGEAP_NET}/24 -o ${OUTSIDE} -j MASQUERADE
 
 	echo 1 >/proc/sys/net/ipv4/conf/all/forwarding
@@ -409,7 +409,7 @@ stop() {
 	[[ ${RUN_AICCU:-0} -eq 1 ]] && do_aiccu stop
 
         iptables -D FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
-        iptables -D FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+        iptables -D FORWARD -d ${BRIDGEAP_NET}/24 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
         iptables -t nat -D POSTROUTING -s ${BRIDGEAP_NET}/24 -o ${OUTSIDE} -j MASQUERADE
 
 
@@ -478,7 +478,7 @@ prestart() {
 	ETHS="$(ip link show | grep -vE "${AVOID_DOWN}master|${WIFIS// /|}|LOOP" | grep -E '\d*:[[:space:]]' | cut -f 2 -d: | awk '{print $1}' | grep -v ${OUTSIDE} | head -1 )"  # ignore LOOP, OUTSIDE, and WIFI interface(s), but list all others
 
 	# automagically decide if we're wifi->wifi, wifi->eth, eth->wifi, or eth->eth, as much as possible, ignoring bridges
-	ROUTED_IFS="$(ip route show scope link | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
+	ROUTED_IFS="$(ip route show scope link proto kernel | grep -v ${OUTSIDE} | sed 's/^.*dev[[:space:]]*\([a-z0-9]*\)[[:space:]]*.*$/\1/g' | sort -u)"  # get a list of internal interfaces with active routes
 
 	for RIF in ${ROUTED_IFS}
 	do
