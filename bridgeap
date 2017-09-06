@@ -215,13 +215,13 @@ hostapd_reconf() {
 	[[ -z "${WPA_PASS}" ]] && ${SED} "s/\(auth_algs\)=.*/\1=0/" ${BRIDGEAP_HOSTAP}
 }
 
-do_aiccu() {
-	# We should always (try to) stop aiccu before starting it again, just in case of config changes
-	[[ -n "$(pgrep aiccu)" ]] && aiccu stop
+do_tunscript() {
+	# We should always (try to) stop the tunscript before starting it again, just in case of config changes
+	${TUNSCRIPT} status && ${TUNSCRIPT} stop
 
 	if [ "$1" = "start" ]
 	then
-		aiccu start
+		${TUNSCRIPT} start
 	fi
 }
 
@@ -387,7 +387,7 @@ start() {
 
 	echo 1 >/proc/sys/net/ipv4/conf/all/forwarding
 
-	[[ ${RUN_AICCU:-0} -eq 1 ]] && do_aiccu start
+	[[ ${RUN_TUNSCRIPT:-0} -eq 1 ]] && do_tunscript start
 	[[ -n "${ADDROUTE}" ]] && do_routes start
 	[[ ${RUN_RADVD:-0} -eq 1 ]] && do_radvd start
 
@@ -406,7 +406,7 @@ stop() {
 	
 	[[ ${RUN_RADVD:-0} -eq 1 ]] && do_radvd stop
 	[[ -n "${ADDROUTE}" ]] && do_routes stop
-	[[ ${RUN_AICCU:-0} -eq 1 ]] && do_aiccu stop
+	[[ ${RUN_TUNSCRIPT:-0} -eq 1 ]] && do_tunscript stop
 
         iptables -D FORWARD -i ${INSIDE} -o ${OUTSIDE} -m conntrack --ctstate NEW -j ACCEPT
         iptables -D FORWARD -d ${BRIDGEAP_NET}/24 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
