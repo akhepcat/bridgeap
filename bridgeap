@@ -110,7 +110,6 @@ cfgcheck() {
 		FAIL=1
 		do_echo "can't read hostap config file: ${BRIDGEAP_HOSTAP}"
 	fi
-
 	if [ -z "${BRIDGEAP_DHCP}" -o ! -r "${BRIDGEAP_DHCP}" ];
 	then
 		FAIL=1
@@ -278,7 +277,6 @@ do_radvd() {
 	if [ "$1" = "start" ]
 	then
 		gen_radvd_cfg
-		do_routes start
 		echo 1 >/proc/sys/net/ipv6/conf/all/forwarding
 		mkdir -p /var/run/radvd
 		chown radvd /var/run/radvd
