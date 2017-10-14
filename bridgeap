@@ -362,9 +362,13 @@ start() {
 	then
 		DHCP_VER=$( dhcpd -h 2>&1 | head -1 | sed 's/[a-z .]//ig')
 
-		[[ -z "${DHCP_VER}" ]] && do_exit 1 "can't determine dhcpd version"
+		if [ -z "${DHCP_VER}" -o ${DHCP_VER:-0} -le 422 ]
+		then
+			unset DHCP_USER
+			unset DHCP_GROUP
+		fi
 
-		if [[ ${DHCP_VER} -gt 422 ]]
+		if [ -n "${DHCP_USER}" -a -n "${DHCP_GROUP}" ]
 		then
 			DUSER="-user ${DHCP_USER}"
 			DGROUP="-group ${DHCP_GROUP}"
