@@ -63,7 +63,7 @@ do_echo() {
 }
 
 auto_update() {
-	cd ${PDIR} && git diff -s --exit-code 
+	cd ${PDIR} && git diff -s --exit-code >/dev/null 2>&1
 	if [ $? -eq 0 ]
 	then
 		# up to date, so
@@ -73,7 +73,7 @@ auto_update() {
 		if [ -r ${PDIR}/.git/index ]
 		then
 			# we updated, need to reload
-			git pull
+			git pull >/dev/null 2>&1
 			exec ${PDIR}/${PROG}
 		fi
 	else
